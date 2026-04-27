@@ -45,6 +45,22 @@ npm run build
 npm run preview
 ```
 
+## Deploy no GitHub Pages
+
+O deploy e feito automaticamente pelo GitHub Actions quando houver push nas branches `main` ou `master`.
+
+No GitHub, configure o Pages em:
+
+```text
+Settings > Pages > Build and deployment > Source > GitHub Actions
+```
+
+URL esperada:
+
+```text
+https://beacontab.github.io/Analisador-Contabil-Pro/
+```
+
 ## Estrutura
 
 ```text

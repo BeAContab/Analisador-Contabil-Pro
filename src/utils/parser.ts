@@ -22,6 +22,17 @@ interface PdfTextItem {
   transform: number[];
 }
 
+function isPdfTextItem(item: unknown): item is PdfTextItem {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'str' in item &&
+    'transform' in item &&
+    typeof (item as PdfTextItem).str === 'string' &&
+    Array.isArray((item as PdfTextItem).transform)
+  );
+}
+
 const accountRegex = /^\s*(\d+(?:\.\d+)*)\b/;
 const cnpjRegex = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/;
 const moneyRegex = /\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?[DC]?|\(?\d+,\d{2}\)?[DC]?|\b0(?:[,.]00)?\b/gi;
@@ -38,8 +49,8 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
-      const items = content.items
-        .filter((item): item is PdfTextItem => typeof item === 'object' && item !== null && 'str' in item)
+      const items = (content.items as unknown[])
+        .filter(isPdfTextItem)
         .map((item) => ({
           text: item.str,
           x: item.transform[4],
