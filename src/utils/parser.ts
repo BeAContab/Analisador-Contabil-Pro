@@ -50,7 +50,6 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
-<<<<<<< HEAD
       const items = (content.items as unknown[])
         .filter(isPdfTextItem)
         .map((item) => ({
@@ -59,19 +58,6 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
           y: item.transform[5],
           page: pageNumber
         }))
-=======
-      const items = content.items
-        .filter((item) => typeof item === 'object' && item !== null && 'str' in item && 'transform' in item)
-        .map((item) => {
-          const textItem = item as PdfTextItem;
-          return {
-            text: textItem.str,
-            x: textItem.transform[4],
-            y: textItem.transform[5],
-            page: pageNumber
-          };
-        })
->>>>>>> testes
         .filter((item) => item.text.trim().length > 0);
 
       pageLines.push(...groupItemsIntoLines(items));
