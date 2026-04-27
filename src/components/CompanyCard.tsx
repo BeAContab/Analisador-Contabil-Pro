@@ -12,6 +12,7 @@ export function CompanyCard({ company }: CompanyCardProps) {
   const activeRows = activeTab === 'inverted' ? company.invertedRows : company.zeroMovementRows;
   const activeTitle =
     activeTab === 'inverted' ? 'Saldos invertidos Ativo/Passivo' : 'Contas com Débito e Crédito zerados';
+  const hasExportRows = company.invertedRows.length > 0 || company.zeroMovementRows.length > 0;
 
   const activeWithCredit = company.invertedRows.filter((row) => row.alertType === 'Ativo com saldo C').length;
   const passiveWithDebit = company.invertedRows.filter((row) => row.alertType === 'Passivo/PL com saldo D').length;
@@ -73,11 +74,11 @@ export function CompanyCard({ company }: CompanyCardProps) {
             )}
           </div>
           <div className="actions">
-            <button type="button" onClick={() => downloadXlsx(company, activeTab)} disabled={activeRows.length === 0}>
-              Baixar XLSX
+            <button type="button" onClick={() => downloadXlsx(company)} disabled={!hasExportRows}>
+              Baixar XLSX consolidado
             </button>
-            <button type="button" onClick={() => downloadPdf(company, activeTab)} disabled={activeRows.length === 0}>
-              Baixar PDF
+            <button type="button" onClick={() => downloadPdf(company)} disabled={!hasExportRows}>
+              Baixar PDF consolidado
             </button>
           </div>
         </div>

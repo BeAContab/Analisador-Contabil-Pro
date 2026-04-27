@@ -37,6 +37,7 @@ const accountRegex = /^\s*(\d+(?:\.\d+)*)\b/;
 const cnpjRegex = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/;
 const moneyRegex = /\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?[DC]?|\(?\d+,\d{2}\)?[DC]?|\b0(?:[,.]00)?\b/gi;
 const moneyBoundaryRegex = /([A-Za-zÀ-ÿ])(\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?[DC]?)/g;
+const defaultNatureAccounts = ['1.2.05.007', '2.4.13.004'];
 
 export async function parsePdfFile(file: File): Promise<CompanyReport> {
   const errors: string[] = [];
@@ -49,6 +50,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
+<<<<<<< HEAD
       const items = (content.items as unknown[])
         .filter(isPdfTextItem)
         .map((item) => ({
@@ -57,6 +59,19 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
           y: item.transform[5],
           page: pageNumber
         }))
+=======
+      const items = content.items
+        .filter((item) => typeof item === 'object' && item !== null && 'str' in item && 'transform' in item)
+        .map((item) => {
+          const textItem = item as PdfTextItem;
+          return {
+            text: textItem.str,
+            x: textItem.transform[4],
+            y: textItem.transform[5],
+            page: pageNumber
+          };
+        })
+>>>>>>> testes
         .filter((item) => item.text.trim().length > 0);
 
       pageLines.push(...groupItemsIntoLines(items));
@@ -70,8 +85,9 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
       .filter((row) => {
         const nature = balanceNature(row.currentBalance);
         return (
-          (row.account.startsWith('1') && nature === 'C') ||
-          (row.account.startsWith('2') && nature === 'D')
+          !isDefaultNatureAccount(row.account) &&
+          ((row.account.startsWith('1') && nature === 'C') ||
+            (row.account.startsWith('2') && nature === 'D'))
         );
       })
       .map((row) => ({
@@ -268,6 +284,10 @@ function parseLedgerLine(rawLine: string, page: number): LedgerLine | null {
 
 function hasFourMoneyValues(text: string): boolean {
   return [...text.matchAll(moneyRegex)].length >= 4;
+}
+
+function isDefaultNatureAccount(account: string): boolean {
+  return defaultNatureAccounts.some((defaultAccount) => account === defaultAccount || account.startsWith(`${defaultAccount}.`));
 }
 
 function normalizeLine(value: string): string {
