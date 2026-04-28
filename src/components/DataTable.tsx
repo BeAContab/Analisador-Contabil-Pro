@@ -16,8 +16,7 @@ type SortKey =
   | 'debit'
   | 'credit'
   | 'currentBalance'
-  | 'code'
-  | 'page';
+  | 'code';
 
 export function DataTable({ rows, kind }: DataTableProps) {
   const [query, setQuery] = useState('');
@@ -71,18 +70,17 @@ export function DataTable({ rows, kind }: DataTableProps) {
               <SortableHead label="Natureza" sortKey="nature" onSort={updateSort} />
               <SortableHead label="Conta Contábil" sortKey="account" onSort={updateSort} />
               <SortableHead label="Nome da Conta" sortKey="name" onSort={updateSort} />
-              <SortableHead label="S. Anterior" sortKey="previousBalance" onSort={updateSort} />
+              {kind === 'inverted' && <SortableHead label="S. Anterior" sortKey="previousBalance" onSort={updateSort} />}
               <SortableHead label="Débito" sortKey="debit" onSort={updateSort} />
               <SortableHead label="Crédito" sortKey="credit" onSort={updateSort} />
-              <SortableHead label="S. Atual" sortKey="currentBalance" onSort={updateSort} />
+              {kind === 'inverted' && <SortableHead label="S. Atual" sortKey="currentBalance" onSort={updateSort} />}
               <SortableHead label="Cod. R." sortKey="code" onSort={updateSort} />
-              <SortableHead label="Página" sortKey="page" onSort={updateSort} />
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={kind === 'inverted' ? 10 : 9} className="emptyCell">
+                <td colSpan={kind === 'inverted' ? 9 : 6} className="emptyCell">
                   Nenhum resultado encontrado.
                 </td>
               </tr>
@@ -93,12 +91,11 @@ export function DataTable({ rows, kind }: DataTableProps) {
                   <td>{classifyAccount(row.account) || '-'}</td>
                   <td className="mono">{row.account}</td>
                   <td>{row.name}</td>
-                  <td className="number">{row.previousBalance}</td>
+                  {kind === 'inverted' && <td className="number">{row.previousBalance}</td>}
                   <td className="number">{row.debit}</td>
                   <td className="number">{row.credit}</td>
-                  <td className="number">{row.currentBalance}</td>
+                  {kind === 'inverted' && <td className="number">{row.currentBalance}</td>}
                   <td className="mono">{row.code ?? '-'}</td>
-                  <td className="mono">{row.page ?? '-'}</td>
                 </tr>
               ))
             )}
@@ -134,6 +131,5 @@ function valueForSort(row: LedgerLine | InvertedBalanceRow, key: SortKey): strin
   if (key === 'credit') return row.creditNumber;
   if (key === 'previousBalance') return parseBrazilianMoney(row.previousBalance);
   if (key === 'currentBalance') return parseBrazilianMoney(row.currentBalance);
-  if (key === 'page') return row.page ?? 0;
   return row[key] ?? '';
 }

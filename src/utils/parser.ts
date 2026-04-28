@@ -75,8 +75,9 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
           : ('Passivo/PL com saldo D' as const)
       }));
 
-    const zeroMovementRows = rows.filter(
-      (row) => isZeroMoney(row.debit, row.debitNumber) && isZeroMoney(row.credit, row.creditNumber)
+    const zeroMovementRows = enrichZeroMovementRows(
+      rows.filter((row) => isZeroMoney(row.debit, row.debitNumber) && isZeroMoney(row.credit, row.creditNumber)),
+      rows
     );
     const comparisonReport = buildComparisonReport(rows);
 
@@ -269,6 +270,24 @@ function hasFourMoneyValues(text: string): boolean {
 
 function isDefaultNatureAccount(account: string): boolean {
   return defaultNatureAccounts.some((defaultAccount) => account === defaultAccount || account.startsWith(`${defaultAccount}.`));
+}
+
+function enrichZeroMovementRows(zeroRows: LedgerLine[], allRows: LedgerLine[]): LedgerLine[] {
+  const accountNames = new Map(allRows.map((row) => [row.account, row.name]));
+
+  return zeroRows.map((row) => {
+    const levels = row.account.split('.');
+    if (levels.length < 5) return row;
+
+    const parentAccount = levels.slice(0, 4).join('.');
+    const parentName = accountNames.get(parentAccount);
+    if (!parentName || row.name.startsWith(`${parentName} - `)) return row;
+
+    return {
+      ...row,
+      name: `${parentName} - ${row.name}`
+    };
+  });
 }
 
 function buildComparisonReport(rows: LedgerLine[]): BalanceComparisonReport {

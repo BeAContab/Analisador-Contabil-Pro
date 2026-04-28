@@ -13,20 +13,16 @@ const invertedColumns = [
   'Debito',
   'Credito',
   'S. Atual',
-  'Cod. R.',
-  'Pag.'
+  'Cod. R.'
 ];
 
 const zeroColumns = [
   'Natureza',
   'Conta Contabil',
   'Nome da Conta',
-  'S. Anterior',
   'Debito',
   'Credito',
-  'S. Atual',
-  'Cod. R.',
-  'Pag.'
+  'Cod. R.'
 ];
 
 const comparisonColumns = [
@@ -36,7 +32,6 @@ const comparisonColumns = [
   'Nome da Conta',
   'S. Atual',
   'Valor numerico',
-  'Pagina',
   'Status'
 ];
 
@@ -129,8 +124,7 @@ function buildWorksheet(
     { wch: 16 },
     { wch: 16 },
     { wch: 16 },
-    { wch: 10 },
-    { wch: 8 }
+    { wch: 10 }
   ];
   return worksheet;
 }
@@ -171,8 +165,7 @@ function invertedBody(rows: InvertedBalanceRow[]) {
     row.debit,
     row.credit,
     row.currentBalance,
-    row.code ?? '',
-    row.page ?? ''
+    row.code ?? ''
   ]);
 }
 
@@ -181,12 +174,9 @@ function zeroBody(rows: LedgerLine[]) {
     classifyAccount(row.account),
     row.account,
     row.name,
-    row.previousBalance,
     row.debit,
     row.credit,
-    row.currentBalance,
-    row.code ?? '',
-    row.page ?? ''
+    row.code ?? ''
   ]);
 }
 
@@ -210,7 +200,6 @@ function comparisonBody(company: CompanyReport) {
     'Distribuição menos Resultado',
     '',
     formatNumberAsBrazilianMoney(comparisonReport.difference),
-    '',
     status
   ]);
 
@@ -225,7 +214,6 @@ function comparisonRow(label: string, row: LedgerLine, status: string) {
     row.name,
     row.currentBalance,
     formatNumberAsBrazilianMoney(Math.abs(parseBrazilianMoney(row.currentBalance))),
-    row.page ?? '',
     status
   ];
 }
