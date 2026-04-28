@@ -30,6 +30,7 @@ export interface CompanyReport {
   unclassified: UnclassifiedLine[];
   invertedRows: InvertedBalanceRow[];
   zeroMovementRows: LedgerLine[];
+  comparisonReport: BalanceComparisonReport;
   errors: string[];
 }
 
@@ -37,4 +38,14 @@ export interface InvertedBalanceRow extends LedgerLine {
   alertType: AlertType;
 }
 
-export type ReportKind = 'inverted' | 'zero';
+export interface BalanceComparisonReport {
+  distributionRow?: LedgerLine;
+  resultRow?: LedgerLine;
+  distributionValue: number;
+  resultValue: number;
+  difference: number;
+  isDistributionGreater: boolean;
+  message: string;
+}
+
+export type ReportKind = 'inverted' | 'zero' | 'comparison';

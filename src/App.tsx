@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useState } from 'react';
+import { ChangeEvent, DragEvent, useMemo, useState } from 'react';
 import { CompanyCard } from './components/CompanyCard';
 import { CompanyReport } from './types';
 import { parsePdfFile } from './utils/parser';
@@ -7,12 +7,17 @@ export function App() {
   const [files, setFiles] = useState<File[]>([]);
   const [reports, setReports] = useState<CompanyReport[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState('');
 
   const totalRows = useMemo(() => reports.reduce((sum, report) => sum + report.rows.length, 0), [reports]);
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    const selected = Array.from(event.target.files ?? []);
+    addFiles(Array.from(event.target.files ?? []));
+    event.target.value = '';
+  }
+
+  function addFiles(selected: File[]) {
     const pdfs = selected.filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     const invalidCount = selected.length - pdfs.length;
 
@@ -27,8 +32,24 @@ export function App() {
       const next = pdfs.filter((file) => !known.has(`${file.name}-${file.size}-${file.lastModified}`));
       return [...current, ...next];
     });
+  }
 
-    event.target.value = '';
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsDragging(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    addFiles(Array.from(event.dataTransfer.files));
   }
 
   function removeFile(fileToRemove: File) {
@@ -74,11 +95,16 @@ export function App() {
       </section>
 
       <section className="uploadPanel" aria-label="Envio de arquivos">
-        <div className="uploadBox">
+        <div
+          className={`uploadBox ${isDragging ? 'dragActive' : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <input id="pdf-upload" type="file" accept="application/pdf,.pdf" multiple onChange={handleFiles} />
           <label htmlFor="pdf-upload">
             <strong>Envie um ou mais arquivos PDF de balancete</strong>
-            <span>Clique para selecionar os arquivos que deseja analisar.</span>
+            <span>Arraste e solte os PDFs aqui ou clique para selecionar os arquivos.</span>
           </label>
         </div>
 

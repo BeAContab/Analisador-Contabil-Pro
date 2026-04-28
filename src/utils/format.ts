@@ -45,3 +45,16 @@ export function isZeroMoney(value: string, parsedValue: number): boolean {
   const clean = value.trim();
   return clean === '' || clean === '0' || clean === '0,00' || clean === '0.00';
 }
+
+export function classifyAccount(account: string): 'Ativo' | 'Passivo' | '' {
+  if (account.startsWith('1')) return 'Ativo';
+  if (account.startsWith('2')) return 'Passivo';
+  return '';
+}
+
+export function formatNumberAsBrazilianMoney(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}

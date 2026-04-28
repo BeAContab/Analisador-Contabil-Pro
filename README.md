@@ -4,16 +4,17 @@ Aplicativo web em React + TypeScript para analisar balancetes contábeis em PDF 
 
 ## Funcionalidades
 
-- Upload de um ou mais PDFs.
+- Upload de um ou mais PDFs por seleção ou drag and drop.
 - Identificação automática de empresa, CNPJ e período de referência.
 - Extração de linhas contábeis com `Conta Contábil`, `Nome da Conta`, `S. Anterior`, `Débito`, `Crédito`, `S. Atual` e `Cod. R.` quando disponível.
 - Relatório de saldos invertidos:
   - Ativo iniciado por `1` com `S. Atual` terminado em `C`.
   - Passivo/PL iniciado por `2` com `S. Atual` terminado em `D`.
-- Relatório de contas com `Débito` e `Crédito` iguais a zero.
+- Relatório de contas sem movimentação no período, com `Débito` e `Crédito` iguais a zero.
+- Relatório de comparação entre `DISTRIBUIÇÃO ANTECIPADA DE LUCROS` e `RESULTADO DO PERÍODO`.
 - Resultados separados por empresa/arquivo.
 - Pesquisa, ordenação e rolagem horizontal nas tabelas.
-- Download de cada relatório em XLSX e PDF.
+- Download consolidado em XLSX e PDF com todas as abas do relatório.
 
 ## Requisitos
 

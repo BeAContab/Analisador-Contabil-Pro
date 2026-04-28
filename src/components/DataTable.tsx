@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
-import { parseBrazilianMoney } from '../utils/format';
+import { classifyAccount, parseBrazilianMoney } from '../utils/format';
 
 interface DataTableProps {
   rows: Array<LedgerLine | InvertedBalanceRow>;
@@ -9,6 +9,7 @@ interface DataTableProps {
 
 type SortKey =
   | 'alertType'
+  | 'nature'
   | 'account'
   | 'name'
   | 'previousBalance'
@@ -67,6 +68,7 @@ export function DataTable({ rows, kind }: DataTableProps) {
           <thead>
             <tr>
               {kind === 'inverted' && <SortableHead label="Tipo de Alerta" sortKey="alertType" onSort={updateSort} />}
+              <SortableHead label="Natureza" sortKey="nature" onSort={updateSort} />
               <SortableHead label="Conta Contábil" sortKey="account" onSort={updateSort} />
               <SortableHead label="Nome da Conta" sortKey="name" onSort={updateSort} />
               <SortableHead label="S. Anterior" sortKey="previousBalance" onSort={updateSort} />
@@ -80,7 +82,7 @@ export function DataTable({ rows, kind }: DataTableProps) {
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={kind === 'inverted' ? 9 : 8} className="emptyCell">
+                <td colSpan={kind === 'inverted' ? 10 : 9} className="emptyCell">
                   Nenhum resultado encontrado.
                 </td>
               </tr>
@@ -88,6 +90,7 @@ export function DataTable({ rows, kind }: DataTableProps) {
               filteredRows.map((row, index) => (
                 <tr key={`${row.account}-${row.name}-${index}`}>
                   {kind === 'inverted' && <td>{(row as InvertedBalanceRow).alertType}</td>}
+                  <td>{classifyAccount(row.account) || '-'}</td>
                   <td className="mono">{row.account}</td>
                   <td>{row.name}</td>
                   <td className="number">{row.previousBalance}</td>
@@ -126,6 +129,7 @@ function SortableHead({
 
 function valueForSort(row: LedgerLine | InvertedBalanceRow, key: SortKey): string | number {
   if (key === 'alertType') return 'alertType' in row ? row.alertType : '';
+  if (key === 'nature') return classifyAccount(row.account);
   if (key === 'debit') return row.debitNumber;
   if (key === 'credit') return row.creditNumber;
   if (key === 'previousBalance') return parseBrazilianMoney(row.previousBalance);

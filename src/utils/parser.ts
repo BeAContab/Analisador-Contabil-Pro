@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { CompanyReport, LedgerLine, UnclassifiedLine } from '../types';
+import { BalanceComparisonReport, CompanyReport, LedgerLine, UnclassifiedLine } from '../types';
 import { balanceNature, isZeroMoney, parseBrazilianMoney } from './format';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -78,6 +78,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
     const zeroMovementRows = rows.filter(
       (row) => isZeroMoney(row.debit, row.debitNumber) && isZeroMoney(row.credit, row.creditNumber)
     );
+    const comparisonReport = buildComparisonReport(rows);
 
     if (rows.length === 0) {
       errors.push('Não foi possível identificar linhas contábeis neste arquivo.');
@@ -93,6 +94,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
       unclassified: parsed.unclassified,
       invertedRows,
       zeroMovementRows,
+      comparisonReport,
       errors
     };
   } catch (error) {
@@ -106,6 +108,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
       unclassified: [],
       invertedRows: [],
       zeroMovementRows: [],
+      comparisonReport: buildComparisonReport([]),
       errors: ['Não foi possível ler este PDF. Verifique se o arquivo está no formato esperado.']
     };
   }
@@ -266,6 +269,48 @@ function hasFourMoneyValues(text: string): boolean {
 
 function isDefaultNatureAccount(account: string): boolean {
   return defaultNatureAccounts.some((defaultAccount) => account === defaultAccount || account.startsWith(`${defaultAccount}.`));
+}
+
+function buildComparisonReport(rows: LedgerLine[]): BalanceComparisonReport {
+  const distributionRow = rows.find(
+    (row) =>
+      row.account === '1.1.04.019' ||
+      normalizeForCompare(row.name).includes('DISTRIBUICAO ANTECIPADA DE LUCROS')
+  );
+  const resultRow = rows.find(
+    (row) => row.account === '3' || normalizeForCompare(row.name) === 'RESULTADO DO PERIODO'
+  );
+
+  const distributionValue = distributionRow ? Math.abs(parseBrazilianMoney(distributionRow.currentBalance)) : 0;
+  const resultValue = resultRow ? Math.abs(parseBrazilianMoney(resultRow.currentBalance)) : 0;
+  const difference = distributionValue - resultValue;
+  const isDistributionGreater = distributionValue > resultValue;
+
+  let message = 'Tudo OK: a Distribuição Antecipada de Lucros não é maior que o Resultado do Período.';
+  if (!distributionRow || !resultRow) {
+    message = 'Atenção: não foi possível localizar uma ou ambas as contas necessárias para a comparação.';
+  } else if (isDistributionGreater) {
+    message = 'Atenção: a Distribuição Antecipada de Lucros é maior que o Resultado do Período.';
+  }
+
+  return {
+    distributionRow,
+    resultRow,
+    distributionValue,
+    resultValue,
+    difference,
+    isDistributionGreater,
+    message
+  };
+}
+
+function normalizeForCompare(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function normalizeLine(value: string): string {
