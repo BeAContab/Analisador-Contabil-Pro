@@ -4,25 +4,15 @@ import * as XLSX from 'xlsx';
 import { CompanyReport, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
 import { classifyAccount, formatNumberAsBrazilianMoney, nowLabel, parseBrazilianMoney, slugify } from './format';
 
-const invertedColumns = [
-  'Tipo de Alerta',
+const balanceColumns = [
   'Natureza',
   'Conta Contabil',
+  'Cod. R.',
   'Nome da Conta',
   'S. Anterior',
   'Debito',
   'Credito',
-  'S. Atual',
-  'Cod. R.'
-];
-
-const zeroColumns = [
-  'Natureza',
-  'Conta Contabil',
-  'Nome da Conta',
-  'Debito',
-  'Credito',
-  'Cod. R.'
+  'S. Atual'
 ];
 
 const comparisonColumns = [
@@ -57,12 +47,12 @@ export function downloadXlsx(company: CompanyReport) {
 
   XLSX.utils.book_append_sheet(
     workbook,
-    buildWorksheet(company, reportTitle('inverted'), invertedColumns, invertedBody(company.invertedRows), createdAt),
+    buildWorksheet(company, reportTitle('inverted'), balanceColumns, balanceBody(company.invertedRows), createdAt),
     'Saldos invertidos'
   );
   XLSX.utils.book_append_sheet(
     workbook,
-    buildWorksheet(company, reportTitle('zero'), zeroColumns, zeroBody(company.zeroMovementRows), createdAt),
+    buildWorksheet(company, reportTitle('zero'), balanceColumns, balanceBody(company.zeroMovementRows), createdAt),
     'Sem movimentacao'
   );
   XLSX.utils.book_append_sheet(
@@ -82,14 +72,15 @@ export function downloadPdf(company: CompanyReport) {
   doc.text('Relatórios consolidados', 40, 36);
   doc.setFontSize(9);
   doc.text(`Empresa: ${company.companyName}`, 40, 58);
-  doc.text(`CNPJ: ${company.cnpj}`, 40, 74);
-  doc.text(`Período: ${company.period}`, 40, 90);
-  doc.text(`Arquivo: ${company.fileName}`, 40, 106);
-  doc.text(`Gerado em: ${createdAt}`, 40, 122);
+  doc.text(`Código da empresa: ${company.companyCode ?? '-'}`, 40, 74);
+  doc.text(`CNPJ: ${company.cnpj}`, 40, 90);
+  doc.text(`Período: ${company.period}`, 40, 106);
+  doc.text(`Arquivo: ${company.fileName}`, 40, 122);
+  doc.text(`Gerado em: ${createdAt}`, 40, 138);
 
-  addPdfSection(doc, reportTitle('inverted'), invertedColumns, invertedBody(company.invertedRows), 150);
+  addPdfSection(doc, reportTitle('inverted'), balanceColumns, balanceBody(company.invertedRows), 166);
   const zeroStartY = getFinalY(doc) + 34;
-  addPdfSection(doc, reportTitle('zero'), zeroColumns, zeroBody(company.zeroMovementRows), zeroStartY);
+  addPdfSection(doc, reportTitle('zero'), balanceColumns, balanceBody(company.zeroMovementRows), zeroStartY);
   const comparisonStartY = getFinalY(doc) + 34;
   addPdfSection(doc, reportTitle('comparison'), comparisonColumns, comparisonBody(company), comparisonStartY);
 
@@ -106,6 +97,7 @@ function buildWorksheet(
   const rows = [
     ['Relatorio', title],
     ['Empresa', company.companyName],
+    ['Código da empresa', company.companyCode ?? '-'],
     ['CNPJ', company.cnpj],
     ['Periodo', company.period],
     ['Arquivo', company.fileName],
@@ -117,14 +109,13 @@ function buildWorksheet(
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
   worksheet['!cols'] = [
     { wch: 26 },
-    { wch: 14 },
-    { wch: 24 },
+    { wch: 18 },
+    { wch: 10 },
     { wch: 42 },
     { wch: 16 },
     { wch: 16 },
     { wch: 16 },
-    { wch: 16 },
-    { wch: 10 }
+    { wch: 16 }
   ];
   return worksheet;
 }
@@ -155,28 +146,16 @@ function addPdfSection(
   });
 }
 
-function invertedBody(rows: InvertedBalanceRow[]) {
+function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>) {
   return rows.map((row) => [
-    row.alertType,
     classifyAccount(row.account),
     row.account,
+    row.code ?? '',
     row.name,
     row.previousBalance,
     row.debit,
     row.credit,
-    row.currentBalance,
-    row.code ?? ''
-  ]);
-}
-
-function zeroBody(rows: LedgerLine[]) {
-  return rows.map((row) => [
-    classifyAccount(row.account),
-    row.account,
-    row.name,
-    row.debit,
-    row.credit,
-    row.code ?? ''
+    row.currentBalance
   ]);
 }
 

@@ -33,6 +33,7 @@ export function CompanyCard({ company }: CompanyCardProps) {
           <p className="eyebrow">Empresa</p>
           <h2>{company.companyName}</h2>
           <div className="metadataGrid">
+            <span>Código: {company.companyCode ?? '-'}</span>
             <span>CNPJ: {company.cnpj}</span>
             <span>Período: {company.period}</span>
             <span>Arquivo: {company.fileName}</span>

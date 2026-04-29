@@ -24,6 +24,7 @@ interface PdfTextItem {
 
 const accountRegex = /^\s*(\d+(?:\.\d+)*)\b/;
 const cnpjRegex = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/;
+const companyCodeRegex = /^\(\s*(\d+)\s*-\s*(\d+)\s*\)\s*(.+)$/;
 const moneyRegex = /\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?[DC]?|\(?\d+,\d{2}\)?[DC]?|\b0(?:[,.]00)?\b/gi;
 const moneyBoundaryRegex = /([A-Za-zÀ-ÿ])(\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?[DC]?)/g;
 const defaultNatureAccounts = ['1.2.05.007', '2.4.13.004'];
@@ -88,6 +89,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
     return {
       id: `${file.name}-${file.size}-${file.lastModified}`,
       fileName: file.name,
+      companyCode: meta.companyCode,
       companyName: meta.companyName,
       cnpj: meta.cnpj,
       period: meta.period,
@@ -102,6 +104,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
     return {
       id: `${file.name}-${file.size}-${file.lastModified}`,
       fileName: file.name,
+      companyCode: undefined,
       companyName: file.name.replace(/\.pdf$/i, ''),
       cnpj: 'CNPJ não identificado',
       period: 'Período não identificado',
@@ -158,9 +161,13 @@ function extractMetadata(text: string, fileName: string) {
     lines.find((line) => /^\(\s*[^)]*\)\s+.+/i.test(line)) ||
     lines.find((line) => /LTDA|S\/A|EIRELI|ME\b|EPP\b/i.test(line));
 
-  const companyName = companyLine
-    ? companyLine.replace(/^\(\s*[^)]*\)\s*/, '').trim() || companyLine
-    : fileName.replace(/\.pdf$/i, '');
+  const companyCodeMatch = companyLine?.match(companyCodeRegex);
+  const companyCode = companyCodeMatch ? `${companyCodeMatch[1]}-${companyCodeMatch[2]}` : undefined;
+  const companyName = companyCodeMatch
+    ? companyCodeMatch[3].trim()
+    : companyLine
+      ? companyLine.replace(/^\(\s*[^)]*\)\s*/, '').trim() || companyLine
+      : fileName.replace(/\.pdf$/i, '');
 
   const cnpj = text.match(cnpjRegex)?.[0] ?? 'CNPJ não identificado';
   const referenceLine = lines.find((line) => /Refer[eê]ncia/i.test(line));
@@ -168,7 +175,7 @@ function extractMetadata(text: string, fileName: string) {
     referenceLine?.match(/(\d{2}\/[A-ZÀ-ÿ]{3}\/\d{4}\s+at[eé]\s+\d{2}\/[A-ZÀ-ÿ]{3}\/\d{4})/i)?.[1] ??
     'Período não identificado';
 
-  return { companyName, cnpj, period };
+  return { companyCode, companyName, cnpj, period };
 }
 
 function extractLedgerLines(lines: PageLine[]) {

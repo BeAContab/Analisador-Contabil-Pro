@@ -8,17 +8,16 @@ interface DataTableProps {
 }
 
 type SortKey =
-  | 'alertType'
   | 'nature'
   | 'account'
+  | 'code'
   | 'name'
   | 'previousBalance'
   | 'debit'
   | 'credit'
-  | 'currentBalance'
-  | 'code';
+  | 'currentBalance';
 
-export function DataTable({ rows, kind }: DataTableProps) {
+export function DataTable({ rows }: DataTableProps) {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('account');
   const [direction, setDirection] = useState<'asc' | 'desc'>('asc');
@@ -66,36 +65,34 @@ export function DataTable({ rows, kind }: DataTableProps) {
         <table>
           <thead>
             <tr>
-              {kind === 'inverted' && <SortableHead label="Tipo de Alerta" sortKey="alertType" onSort={updateSort} />}
               <SortableHead label="Natureza" sortKey="nature" onSort={updateSort} />
               <SortableHead label="Conta Contábil" sortKey="account" onSort={updateSort} />
+              <SortableHead label="Cod. R." sortKey="code" onSort={updateSort} />
               <SortableHead label="Nome da Conta" sortKey="name" onSort={updateSort} />
-              {kind === 'inverted' && <SortableHead label="S. Anterior" sortKey="previousBalance" onSort={updateSort} />}
+              <SortableHead label="S. Anterior" sortKey="previousBalance" onSort={updateSort} />
               <SortableHead label="Débito" sortKey="debit" onSort={updateSort} />
               <SortableHead label="Crédito" sortKey="credit" onSort={updateSort} />
-              {kind === 'inverted' && <SortableHead label="S. Atual" sortKey="currentBalance" onSort={updateSort} />}
-              <SortableHead label="Cod. R." sortKey="code" onSort={updateSort} />
+              <SortableHead label="S. Atual" sortKey="currentBalance" onSort={updateSort} />
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={kind === 'inverted' ? 9 : 6} className="emptyCell">
+                <td colSpan={8} className="emptyCell">
                   Nenhum resultado encontrado.
                 </td>
               </tr>
             ) : (
               filteredRows.map((row, index) => (
                 <tr key={`${row.account}-${row.name}-${index}`}>
-                  {kind === 'inverted' && <td>{(row as InvertedBalanceRow).alertType}</td>}
                   <td>{classifyAccount(row.account) || '-'}</td>
                   <td className="mono">{row.account}</td>
+                  <td className="mono">{row.code ?? '-'}</td>
                   <td>{row.name}</td>
-                  {kind === 'inverted' && <td className="number">{row.previousBalance}</td>}
+                  <td className="number">{row.previousBalance}</td>
                   <td className="number">{row.debit}</td>
                   <td className="number">{row.credit}</td>
-                  {kind === 'inverted' && <td className="number">{row.currentBalance}</td>}
-                  <td className="mono">{row.code ?? '-'}</td>
+                  <td className="number">{row.currentBalance}</td>
                 </tr>
               ))
             )}
@@ -125,7 +122,6 @@ function SortableHead({
 }
 
 function valueForSort(row: LedgerLine | InvertedBalanceRow, key: SortKey): string | number {
-  if (key === 'alertType') return 'alertType' in row ? row.alertType : '';
   if (key === 'nature') return classifyAccount(row.account);
   if (key === 'debit') return row.debitNumber;
   if (key === 'credit') return row.creditNumber;

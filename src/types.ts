@@ -23,6 +23,7 @@ export interface UnclassifiedLine {
 export interface CompanyReport {
   id: string;
   fileName: string;
+  companyCode?: string;
   companyName: string;
   cnpj: string;
   period: string;
