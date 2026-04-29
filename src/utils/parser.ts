@@ -22,7 +22,7 @@ interface PdfTextItem {
   transform: number[];
 }
 
-const accountRegex = /^\s*(\d+(?:\.\d+)*)\b/;
+const accountRegex = /^\s*([1-9](?:\.\d+)*)(?=\s|$)/;
 const cnpjRegex = /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/;
 const companyCodeRegex = /^\(\s*(\d+)\s*-\s*(\d+)\s*\)\s*(.+)$/;
 const moneyRegex = /\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?[DC]?|\(?\d+,\d{2}\)?[DC]?|\b0(?:[,.]00)?\b/gi;
