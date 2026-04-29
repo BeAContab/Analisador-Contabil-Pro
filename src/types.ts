@@ -41,11 +41,14 @@ export interface InvertedBalanceRow extends LedgerLine {
 
 export interface BalanceComparisonReport {
   distributionRow?: LedgerLine;
-  resultRow?: LedgerLine;
-  distributionValue: number;
-  resultValue: number;
+  account3Row?: LedgerLine;
+  account6Row?: LedgerLine;
+  account2413Row?: LedgerLine;
+  mode: 'distribution' | 'fallback';
+  baseValue: number;
+  targetValue: number;
   difference: number;
-  isDistributionGreater: boolean;
+  isAttention: boolean;
   message: string;
 }
 

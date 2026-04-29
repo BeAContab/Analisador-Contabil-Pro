@@ -303,31 +303,59 @@ function buildComparisonReport(rows: LedgerLine[]): BalanceComparisonReport {
       row.account === '1.1.04.019' ||
       normalizeForCompare(row.name).includes('DISTRIBUICAO ANTECIPADA DE LUCROS')
   );
-  const resultRow = rows.find(
-    (row) => row.account === '3' || normalizeForCompare(row.name) === 'RESULTADO DO PERIODO'
-  );
+  const account3Row = findAccountRow(rows, '3');
+  const account6Row = findAccountRow(rows, '6');
+  const account2413Row = findAccountRow(rows, '2.4.13');
 
   const distributionValue = distributionRow ? Math.abs(parseBrazilianMoney(distributionRow.currentBalance)) : 0;
-  const resultValue = resultRow ? Math.abs(parseBrazilianMoney(resultRow.currentBalance)) : 0;
-  const difference = distributionValue - resultValue;
-  const isDistributionGreater = distributionValue > resultValue;
+  const shouldUseFallback = distributionValue === 0;
+  const baseValue = shouldUseFallback
+    ? signedCurrentBalance(account3Row) + signedCurrentBalance(account6Row)
+    : signedCurrentBalance(account3Row) + signedCurrentBalance(account6Row) + signedCurrentBalance(account2413Row);
+  const targetValue = shouldUseFallback ? absoluteCurrentBalance(account2413Row) : distributionValue;
+  const difference = baseValue - targetValue;
+  const hasMissingRows =
+    !account3Row || (shouldUseFallback ? !account2413Row : !distributionRow || !account2413Row);
+  const isAttention = hasMissingRows || baseValue < targetValue;
 
-  let message = 'Tudo OK: a Distribuição Antecipada de Lucros não é maior que o Resultado do Período.';
-  if (!distributionRow || !resultRow) {
-    message = 'Atenção: não foi possível localizar uma ou ambas as contas necessárias para a comparação.';
-  } else if (isDistributionGreater) {
-    message = 'Atenção: a Distribuição Antecipada de Lucros é maior que o Resultado do Período.';
+  let message = shouldUseFallback
+    ? 'Tudo OK: a soma das contas 3 e 6 é maior que o S. Atual da conta 2.4.13.'
+    : 'Tudo OK: a soma das contas 3, 6 e 2.4.13 é maior que o S. Atual da conta 1.1.04.019.';
+
+  if (hasMissingRows) {
+    message = 'Atenção: não foi possível localizar todas as contas necessárias para a comparação.';
+  } else if (baseValue < targetValue) {
+    message = shouldUseFallback
+      ? 'Atenção: a soma das contas 3 e 6 está menor que o S. Atual da conta 2.4.13.'
+      : 'Atenção: a soma das contas 3, 6 e 2.4.13 está menor que o S. Atual da conta 1.1.04.019.';
   }
 
   return {
     distributionRow,
-    resultRow,
-    distributionValue,
-    resultValue,
+    account3Row,
+    account6Row,
+    account2413Row,
+    mode: shouldUseFallback ? 'fallback' : 'distribution',
+    baseValue,
+    targetValue,
     difference,
-    isDistributionGreater,
+    isAttention,
     message
   };
+}
+
+function findAccountRow(rows: LedgerLine[], account: string): LedgerLine | undefined {
+  return rows.find((row) => row.account === account);
+}
+
+function absoluteCurrentBalance(row?: LedgerLine): number {
+  return row ? Math.abs(parseBrazilianMoney(row.currentBalance)) : 0;
+}
+
+function signedCurrentBalance(row?: LedgerLine): number {
+  if (!row) return 0;
+  const value = Math.abs(parseBrazilianMoney(row.currentBalance));
+  return balanceNature(row.currentBalance) === 'D' ? -value : value;
 }
 
 function normalizeForCompare(value: string): string {

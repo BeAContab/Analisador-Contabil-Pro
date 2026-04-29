@@ -394,6 +394,51 @@ tr:nth-child(even) td {
   margin-top: 14px;
 }
 
+.calculationBox {
+  margin-top: 14px;
+  border: 1px solid #d8e4e8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fbfb;
+}
+
+.calculationBox h3 {
+  margin: 0 0 8px;
+  color: #12313a;
+  font-size: 1rem;
+}
+
+.calculationBox p {
+  margin: 0 0 12px;
+  color: #465a62;
+  font-weight: 700;
+}
+
+.calculationTable {
+  display: grid;
+  gap: 8px;
+}
+
+.calculationTable div {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, auto);
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid #e1e9ec;
+  padding-top: 8px;
+}
+
+.calculationTable span {
+  color: #607179;
+  font-weight: 700;
+}
+
+.calculationTable strong {
+  color: #12313a;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .comparisonAccount {
   border: 1px solid #e1e9ec;
   border-radius: 8px;

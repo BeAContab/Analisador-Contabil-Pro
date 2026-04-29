@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CompanyReport, ReportKind } from '../types';
-import { classifyAccount, formatNumberAsBrazilianMoney } from '../utils/format';
+import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, parseBrazilianMoney } from '../utils/format';
 import { downloadPdf, downloadXlsx } from '../utils/reports';
 import { DataTable } from './DataTable';
 
@@ -21,7 +21,12 @@ export function CompanyCard({ company }: CompanyCardProps) {
   const hasExportRows =
     company.invertedRows.length > 0 ||
     company.zeroMovementRows.length > 0 ||
-    Boolean(company.comparisonReport.distributionRow || company.comparisonReport.resultRow);
+    Boolean(
+      company.comparisonReport.distributionRow ||
+        company.comparisonReport.account3Row ||
+        company.comparisonReport.account6Row ||
+        company.comparisonReport.account2413Row
+    );
 
   const activeWithCredit = company.invertedRows.filter((row) => row.alertType === 'Ativo com saldo C').length;
   const passiveWithDebit = company.invertedRows.filter((row) => row.alertType === 'Passivo/PL com saldo D').length;
@@ -131,8 +136,8 @@ function ComparisonSummary({ company }: { company: CompanyReport }) {
   const { comparisonReport } = company;
   return (
     <div className="summaryGrid">
-      <SummaryMoney label="Distribuição Antecipada de Lucros" value={comparisonReport.distributionValue} />
-      <SummaryMoney label="Resultado do Período" value={comparisonReport.resultValue} />
+      <SummaryMoney label="Soma calculada" value={comparisonReport.baseValue} />
+      <SummaryMoney label="Valor comparado" value={comparisonReport.targetValue} />
       <SummaryMoney label="Diferença" value={comparisonReport.difference} />
     </div>
   );
@@ -140,21 +145,43 @@ function ComparisonSummary({ company }: { company: CompanyReport }) {
 
 function ComparisonPanel({ company }: { company: CompanyReport }) {
   const { comparisonReport } = company;
-  const statusClass =
-    comparisonReport.isDistributionGreater || !comparisonReport.distributionRow || !comparisonReport.resultRow
-      ? 'attention'
-      : 'ok';
+  const statusClass = comparisonReport.isAttention ? 'attention' : 'ok';
+  const calculationRows = buildCalculationRows(company);
+  const targetTitle =
+    comparisonReport.mode === 'fallback'
+      ? 'Conta comparada: 2.4.13'
+      : 'Conta comparada: 1.1.04.019';
 
   return (
     <div className="comparisonPanel">
       <div className={`statusBox ${statusClass}`}>{comparisonReport.message}</div>
+      <div className="calculationBox">
+        <h3>Cálculo</h3>
+        <p>{comparisonFormula(company)}</p>
+        <div className="calculationTable">
+          {calculationRows.map((row) => (
+            <div key={row.label}>
+              <span>{row.label}</span>
+              <strong>{formatNumberAsBrazilianMoney(row.value)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="comparisonGrid">
+        <ComparisonAccount title="Conta 3" row={comparisonReport.account3Row} value={signedCurrentBalance(comparisonReport.account3Row)} />
+        <ComparisonAccount title="Conta 6" row={comparisonReport.account6Row} value={signedCurrentBalance(comparisonReport.account6Row)} />
+        {comparisonReport.mode === 'distribution' && (
+          <ComparisonAccount
+            title="Conta 2.4.13"
+            row={comparisonReport.account2413Row}
+            value={signedCurrentBalance(comparisonReport.account2413Row)}
+          />
+        )}
         <ComparisonAccount
-          title="Distribuição Antecipada de Lucros"
-          row={comparisonReport.distributionRow}
-          value={comparisonReport.distributionValue}
+          title={targetTitle}
+          row={comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow}
+          value={comparisonReport.targetValue}
         />
-        <ComparisonAccount title="Resultado do Período" row={comparisonReport.resultRow} value={comparisonReport.resultValue} />
       </div>
     </div>
   );
@@ -218,4 +245,42 @@ function SummaryMoney({ label, value }: { label: string; value: number }) {
       <span>{label}</span>
     </div>
   );
+}
+
+function signedCurrentBalance(row?: CompanyReport['rows'][number]): number {
+  if (!row) return 0;
+  const value = Math.abs(parseBrazilianMoney(row.currentBalance));
+  return balanceNature(row.currentBalance) === 'D' ? -value : value;
+}
+
+function comparisonFormula(company: CompanyReport): string {
+  const { comparisonReport } = company;
+  if (comparisonReport.mode === 'fallback') {
+    return 'Soma calculada = Conta 3 + Conta 6. Comparação = Soma calculada - Conta 2.4.13.';
+  }
+
+  return 'Soma calculada = Conta 3 + Conta 6 + Conta 2.4.13. Comparação = Soma calculada - Conta 1.1.04.019.';
+}
+
+function buildCalculationRows(company: CompanyReport) {
+  const { comparisonReport } = company;
+  const rows = [
+    { label: 'Conta 3', value: signedCurrentBalance(comparisonReport.account3Row) },
+    { label: 'Conta 6', value: signedCurrentBalance(comparisonReport.account6Row) }
+  ];
+
+  if (comparisonReport.mode === 'distribution') {
+    rows.push({ label: 'Conta 2.4.13', value: signedCurrentBalance(comparisonReport.account2413Row) });
+  }
+
+  rows.push(
+    { label: 'Soma calculada', value: comparisonReport.baseValue },
+    {
+      label: comparisonReport.mode === 'fallback' ? 'Valor comparado: 2.4.13' : 'Valor comparado: 1.1.04.019',
+      value: comparisonReport.targetValue
+    },
+    { label: 'Diferença', value: comparisonReport.difference }
+  );
+
+  return rows;
 }

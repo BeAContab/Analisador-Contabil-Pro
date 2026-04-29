@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { CompanyReport, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
-import { classifyAccount, formatNumberAsBrazilianMoney, nowLabel, parseBrazilianMoney, slugify } from './format';
+import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, nowLabel, parseBrazilianMoney, slugify } from './format';
 
 const balanceColumns = [
   'Natureza',
@@ -21,7 +21,7 @@ const comparisonColumns = [
   'Conta Contabil',
   'Nome da Conta',
   'S. Atual',
-  'Valor numerico',
+  'Valor no calculo',
   'Status'
 ];
 
@@ -162,21 +162,56 @@ function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>) {
 function comparisonBody(company: CompanyReport) {
   const { comparisonReport } = company;
   const status = comparisonReport.message;
-  const rows: Array<Array<string | number>> = [];
+  const rows: Array<Array<string | number>> = [
+    ['Formula', '', '', comparisonFormula(company), '', '', status]
+  ];
 
-  if (comparisonReport.distributionRow) {
-    rows.push(comparisonRow('Distribuição Antecipada de Lucros', comparisonReport.distributionRow, status));
+  rows.push(comparisonRow('Conta 3', comparisonReport.account3Row, signedCurrentBalance(comparisonReport.account3Row), status));
+  rows.push(comparisonRow('Conta 6', comparisonReport.account6Row, signedCurrentBalance(comparisonReport.account6Row), status));
+  if (comparisonReport.mode === 'distribution') {
+    rows.push(
+      comparisonRow(
+        'Conta 2.4.13',
+        comparisonReport.account2413Row,
+        signedCurrentBalance(comparisonReport.account2413Row),
+        status
+      )
+    );
   }
+  rows.push(
+    comparisonRow(
+      comparisonReport.mode === 'fallback' ? 'Conta comparada: 2.4.13' : 'Conta comparada: 1.1.04.019',
+      comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow,
+      comparisonReport.targetValue,
+      status
+    )
+  );
 
-  if (comparisonReport.resultRow) {
-    rows.push(comparisonRow('Resultado do Período', comparisonReport.resultRow, status));
-  }
+  rows.push([
+    'Soma calculada',
+    '',
+    '',
+    '',
+    '',
+    formatNumberAsBrazilianMoney(comparisonReport.baseValue),
+    status
+  ]);
+
+  rows.push([
+    'Valor comparado',
+    '',
+    '',
+    comparisonReport.mode === 'fallback' ? 'S. Atual da conta 2.4.13' : 'S. Atual da conta 1.1.04.019',
+    '',
+    formatNumberAsBrazilianMoney(comparisonReport.targetValue),
+    status
+  ]);
 
   rows.push([
     'Diferença',
     '',
     '',
-    'Distribuição menos Resultado',
+    'Soma calculada menos valor comparado',
     '',
     formatNumberAsBrazilianMoney(comparisonReport.difference),
     status
@@ -185,16 +220,31 @@ function comparisonBody(company: CompanyReport) {
   return rows;
 }
 
-function comparisonRow(label: string, row: LedgerLine, status: string) {
+function comparisonRow(label: string, row: LedgerLine | undefined, value: number, status: string) {
   return [
     label,
-    classifyAccount(row.account),
-    row.account,
-    row.name,
-    row.currentBalance,
-    formatNumberAsBrazilianMoney(Math.abs(parseBrazilianMoney(row.currentBalance))),
+    row ? classifyAccount(row.account) : '',
+    row?.account ?? '',
+    row?.name ?? 'Conta não localizada',
+    row?.currentBalance ?? '',
+    formatNumberAsBrazilianMoney(value),
     status
   ];
+}
+
+function signedCurrentBalance(row?: LedgerLine): number {
+  if (!row) return 0;
+  const value = Math.abs(parseBrazilianMoney(row.currentBalance));
+  return balanceNature(row.currentBalance) === 'D' ? -value : value;
+}
+
+function comparisonFormula(company: CompanyReport): string {
+  const { comparisonReport } = company;
+  if (comparisonReport.mode === 'fallback') {
+    return 'Soma calculada = Conta 3 + Conta 6. Comparação = Soma calculada - Conta 2.4.13.';
+  }
+
+  return 'Soma calculada = Conta 3 + Conta 6 + Conta 2.4.13. Comparação = Soma calculada - Conta 1.1.04.019.';
 }
 
 function getFinalY(doc: jsPDF) {
