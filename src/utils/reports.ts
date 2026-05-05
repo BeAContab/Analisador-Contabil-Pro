@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { CompanyReport, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
+import { AnalysisCalculation, AnalysisKind, CompanyReport, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
 import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, nowLabel, parseBrazilianMoney, slugify } from './format';
 
 const balanceColumns = [
@@ -25,20 +25,92 @@ const comparisonColumns = [
   'Status'
 ];
 
+export const analysisOrder: AnalysisKind[] = [
+  'analysis1',
+  'analysis2',
+  'analysis3',
+  'analysis4',
+  'analysis5',
+  'analysis6',
+  'analysis7',
+  'analysis8',
+  'analysis9'
+];
+
+export const reportTabs: Array<{ kind: ReportKind; label: string }> = [
+  { kind: 'inverted', label: 'Saldos invertidos' },
+  { kind: 'zero', label: 'Contas sem movimentacao' },
+  { kind: 'comparison', label: 'Distribuicao x Resultado' },
+  { kind: 'analysis1', label: 'Clientes com Saldo Atual Baixo' },
+  { kind: 'analysis2', label: 'Cliente Pessoa Fisica Fora da Regra' },
+  { kind: 'analysis3', label: 'Conciliacao Clientes x Receitas Operacionais' },
+  { kind: 'analysis4', label: 'Clientes com Saldo Residual' },
+  { kind: 'analysis5', label: 'Clientes sem Credito no Periodo' },
+  { kind: 'analysis6', label: 'Fornecedores sem Debito no Periodo' },
+  { kind: 'analysis7', label: 'Validacao Estoques x Fornecedores' },
+  { kind: 'analysis8', label: 'Fornecedores com Saldo Residual' },
+  { kind: 'analysis9', label: 'Fornecedores com Credito sem Debito' }
+];
+
 export function reportRows(company: CompanyReport, kind: ReportKind) {
   if (kind === 'inverted') return company.invertedRows;
   if (kind === 'zero') return company.zeroMovementRows;
-  return [];
+  if (kind === 'comparison') return [];
+  return company.analysisReports.find((report) => report.kind === kind)?.rows ?? [];
 }
 
-export function reportTitle(kind: ReportKind): string {
+export function reportTitle(kind: ReportKind, company?: CompanyReport): string {
   if (kind === 'inverted') return 'Saldos invertidos Ativo/Passivo';
-  if (kind === 'zero') return 'Contas sem movimentação no período';
-  return 'Comparação Distribuição x Resultado';
+  if (kind === 'zero') return 'Contas sem movimentacao no periodo';
+  if (kind === 'comparison') return 'Comparacao Distribuicao x Resultado';
+  return company?.analysisReports.find((report) => report.kind === kind)?.title ?? kind;
+}
+
+export function analysisMessage(company: CompanyReport, kind: AnalysisKind): string {
+  return company.analysisReports.find((report) => report.kind === kind)?.message ?? 'Relatorio nao encontrado.';
+}
+
+export function analysisIntro(company: CompanyReport, kind: AnalysisKind): string {
+  return company.analysisReports.find((report) => report.kind === kind)?.intro ?? '';
+}
+
+export function analysisAttention(company: CompanyReport, kind: AnalysisKind): boolean {
+  return company.analysisReports.find((report) => report.kind === kind)?.isAttention ?? true;
+}
+
+export function analysisCalculation(company: CompanyReport, kind: AnalysisKind): AnalysisCalculation | undefined {
+  return company.analysisReports.find((report) => report.kind === kind)?.calculation;
+}
+
+export function reportIntro(kind: ReportKind, company?: CompanyReport): string {
+  if (kind === 'inverted') {
+    return 'Aponta contas do ativo com saldo credor e contas do passivo ou patrimonio liquido com saldo devedor, sinalizando possiveis inversoes de natureza.';
+  }
+  if (kind === 'zero') {
+    return 'Lista contas sem movimentacao no periodo, isto e, com debito e credito zerados.';
+  }
+  if (kind === 'comparison') {
+    return 'Compara distribuicao antecipada de lucros com o resultado apurado, usando as contas de referencia configuradas no projeto.';
+  }
+  return company ? analysisIntro(company, kind) : '';
 }
 
 export function reportFileName(company: CompanyReport, extension: 'xlsx' | 'pdf') {
   return `${slugify(company.companyName)}_relatorios-consolidados.${extension}`;
+}
+
+export function hasExportContent(company: CompanyReport): boolean {
+  return (
+    company.invertedRows.length > 0 ||
+    company.zeroMovementRows.length > 0 ||
+    Boolean(
+      company.comparisonReport.distributionRow ||
+        company.comparisonReport.account3Row ||
+        company.comparisonReport.account6Row ||
+        company.comparisonReport.account2413Row
+    ) ||
+    company.analysisReports.some((report) => report.rows.length > 0 || report.message.length > 0)
+  );
 }
 
 export function downloadXlsx(company: CompanyReport) {
@@ -47,19 +119,60 @@ export function downloadXlsx(company: CompanyReport) {
 
   XLSX.utils.book_append_sheet(
     workbook,
-    buildWorksheet(company, reportTitle('inverted'), balanceColumns, balanceBody(company.invertedRows), createdAt),
+    buildWorksheet(
+      company,
+      reportTitle('inverted'),
+      balanceColumns,
+      balanceBody(company.invertedRows),
+      createdAt,
+      undefined,
+      reportIntro('inverted')
+    ),
     'Saldos invertidos'
   );
   XLSX.utils.book_append_sheet(
     workbook,
-    buildWorksheet(company, reportTitle('zero'), balanceColumns, balanceBody(company.zeroMovementRows), createdAt),
+    buildWorksheet(
+      company,
+      reportTitle('zero'),
+      balanceColumns,
+      balanceBody(company.zeroMovementRows),
+      createdAt,
+      undefined,
+      reportIntro('zero')
+    ),
     'Sem movimentacao'
   );
   XLSX.utils.book_append_sheet(
     workbook,
-    buildWorksheet(company, reportTitle('comparison'), comparisonColumns, comparisonBody(company), createdAt),
+    buildWorksheet(
+      company,
+      reportTitle('comparison'),
+      comparisonColumns,
+      comparisonBody(company),
+      createdAt,
+      company.comparisonReport.message,
+      reportIntro('comparison')
+    ),
     'Comparacao'
   );
+
+  analysisOrder.forEach((kind, index) => {
+    XLSX.utils.book_append_sheet(
+      workbook,
+      buildWorksheet(
+        company,
+        reportTitle(kind, company),
+        balanceColumns,
+        balanceBody(reportRows(company, kind)),
+        createdAt,
+        analysisMessage(company, kind),
+        reportIntro(kind, company),
+        analysisCalculation(company, kind)
+      ),
+      `Analise ${index + 1}`
+    );
+  });
 
   XLSX.writeFile(workbook, reportFileName(company, 'xlsx'));
 }
@@ -69,20 +182,56 @@ export function downloadPdf(company: CompanyReport) {
   const createdAt = nowLabel();
 
   doc.setFontSize(14);
-  doc.text('Relatórios consolidados', 40, 36);
+  doc.text('Relatorios consolidados', 40, 36);
   doc.setFontSize(9);
   doc.text(`Empresa: ${company.companyName}`, 40, 58);
-  doc.text(`Código da empresa: ${company.companyCode ?? '-'}`, 40, 74);
+  doc.text(`Codigo da empresa: ${company.companyCode ?? '-'}`, 40, 74);
   doc.text(`CNPJ: ${company.cnpj}`, 40, 90);
-  doc.text(`Período: ${company.period}`, 40, 106);
+  doc.text(`Periodo: ${company.period}`, 40, 106);
   doc.text(`Arquivo: ${company.fileName}`, 40, 122);
   doc.text(`Gerado em: ${createdAt}`, 40, 138);
 
-  addPdfSection(doc, reportTitle('inverted'), balanceColumns, balanceBody(company.invertedRows), 166);
-  const zeroStartY = getFinalY(doc) + 34;
-  addPdfSection(doc, reportTitle('zero'), balanceColumns, balanceBody(company.zeroMovementRows), zeroStartY);
-  const comparisonStartY = getFinalY(doc) + 34;
-  addPdfSection(doc, reportTitle('comparison'), comparisonColumns, comparisonBody(company), comparisonStartY);
+  let nextY = 166;
+  nextY = addPdfSection(
+    doc,
+    reportTitle('inverted'),
+    balanceColumns,
+    balanceBody(company.invertedRows),
+    nextY,
+    undefined,
+    reportIntro('inverted')
+  );
+  nextY = addPdfSection(
+    doc,
+    reportTitle('zero'),
+    balanceColumns,
+    balanceBody(company.zeroMovementRows),
+    nextY + 34,
+    undefined,
+    reportIntro('zero')
+  );
+  nextY = addPdfSection(
+    doc,
+    reportTitle('comparison'),
+    comparisonColumns,
+    comparisonBody(company),
+    nextY + 34,
+    company.comparisonReport.message,
+    reportIntro('comparison')
+  );
+
+  analysisOrder.forEach((kind) => {
+    nextY = addPdfSection(
+      doc,
+      reportTitle(kind, company),
+      balanceColumns,
+      balanceBody(reportRows(company, kind)),
+      nextY + 34,
+      analysisMessage(company, kind),
+      reportIntro(kind, company),
+      analysisCalculation(company, kind)
+    );
+  });
 
   doc.save(reportFileName(company, 'pdf'));
 }
@@ -92,16 +241,24 @@ function buildWorksheet(
   title: string,
   columns: string[],
   body: Array<Array<string | number>>,
-  createdAt: string
+  createdAt: string,
+  message?: string,
+  intro?: string,
+  calculation?: AnalysisCalculation
 ) {
   const rows = [
     ['Relatorio', title],
     ['Empresa', company.companyName],
-    ['Código da empresa', company.companyCode ?? '-'],
+    ['Codigo da empresa', company.companyCode ?? '-'],
     ['CNPJ', company.cnpj],
     ['Periodo', company.period],
     ['Arquivo', company.fileName],
     ['Gerado em', createdAt],
+    ...(intro ? [['Introducao', intro]] : []),
+    ...(message ? [['Status', message]] : []),
+    ...(calculation
+      ? [['Formula', calculation.formula], ...calculation.items.map((item) => [item.label, formatNumberAsBrazilianMoney(item.value)])]
+      : []),
     [],
     columns,
     ...(body.length ? body : [['Nenhum resultado encontrado.']])
@@ -125,10 +282,13 @@ function addPdfSection(
   title: string,
   columns: string[],
   body: Array<Array<string | number>>,
-  startY: number
+  startY: number,
+  message?: string,
+  intro?: string,
+  calculation?: AnalysisCalculation
 ) {
   const pageHeight = doc.internal.pageSize.getHeight();
-  const normalizedStartY = startY > pageHeight - 80 ? 40 : startY;
+  const normalizedStartY = startY > pageHeight - 120 ? 40 : startY;
   if (normalizedStartY !== startY) {
     doc.addPage();
   }
@@ -136,14 +296,39 @@ function addPdfSection(
   doc.setFontSize(11);
   doc.text(title, 40, normalizedStartY);
 
+  let tableStartY = normalizedStartY + 12;
+  if (intro) {
+    doc.setFontSize(8);
+    doc.text(intro, 40, tableStartY, { maxWidth: doc.internal.pageSize.getWidth() - 80 });
+    tableStartY += 14;
+  }
+  if (message) {
+    doc.setFontSize(8);
+    doc.text(message, 40, tableStartY, { maxWidth: doc.internal.pageSize.getWidth() - 80 });
+    tableStartY += 14;
+  }
+  if (calculation) {
+    doc.setFontSize(8);
+    doc.text(calculation.formula, 40, tableStartY, { maxWidth: doc.internal.pageSize.getWidth() - 80 });
+    tableStartY += 12;
+    calculation.items.forEach((item) => {
+      doc.text(`${item.label}: ${formatNumberAsBrazilianMoney(item.value)}`, 40, tableStartY, {
+        maxWidth: doc.internal.pageSize.getWidth() - 80
+      });
+      tableStartY += 10;
+    });
+  }
+
   autoTable(doc, {
-    startY: normalizedStartY + 12,
+    startY: tableStartY,
     head: [columns],
     body: body.length ? body : [['Nenhum resultado encontrado.']],
     styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
     headStyles: { fillColor: [21, 78, 94] },
     margin: { left: 36, right: 36 }
   });
+
+  return getFinalY(doc);
 }
 
 function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>) {
@@ -208,7 +393,7 @@ function comparisonBody(company: CompanyReport) {
   ]);
 
   rows.push([
-    'Diferença',
+    'Diferenca',
     '',
     '',
     'Soma calculada menos valor comparado',
@@ -225,7 +410,7 @@ function comparisonRow(label: string, row: LedgerLine | undefined, value: number
     label,
     row ? classifyAccount(row.account) : '',
     row?.account ?? '',
-    row?.name ?? 'Conta não localizada',
+    row?.name ?? 'Conta nao localizada',
     row?.currentBalance ?? '',
     formatNumberAsBrazilianMoney(value),
     status
@@ -241,10 +426,10 @@ function signedCurrentBalance(row?: LedgerLine): number {
 function comparisonFormula(company: CompanyReport): string {
   const { comparisonReport } = company;
   if (comparisonReport.mode === 'fallback') {
-    return 'Soma calculada = Conta 3 + Conta 6. Comparação = Soma calculada - Conta 2.4.13.';
+    return 'Soma calculada = Conta 3 + Conta 6. Comparacao = Soma calculada - Conta 2.4.13.';
   }
 
-  return 'Soma calculada = Conta 3 + Conta 6 + Conta 2.4.13. Comparação = Soma calculada - Conta 1.1.04.019.';
+  return 'Soma calculada = Conta 3 + Conta 6 + Conta 2.4.13. Comparacao = Soma calculada - Conta 1.1.04.019.';
 }
 
 function getFinalY(doc: jsPDF) {

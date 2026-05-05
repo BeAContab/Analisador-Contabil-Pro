@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { BalanceComparisonReport, CompanyReport, LedgerLine, UnclassifiedLine } from '../types';
+import { AnalysisReport, BalanceComparisonReport, CompanyReport, LedgerLine, UnclassifiedLine } from '../types';
 import { balanceNature, isZeroMoney, parseBrazilianMoney } from './format';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -9,6 +9,7 @@ interface TextItem {
   text: string;
   x: number;
   y: number;
+  width: number;
   page: number;
 }
 
@@ -20,6 +21,7 @@ interface PageLine {
 interface PdfTextItem {
   str: string;
   transform: number[];
+  width?: number;
 }
 
 const accountRegex = /^\s*([1-9](?:\.\d+)*)(?=\s|$)/;
@@ -48,6 +50,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
             text: textItem.str,
             x: textItem.transform[4],
             y: textItem.transform[5],
+            width: textItem.width ?? Math.max(textItem.str.length * 4, 8),
             page: pageNumber
           };
         })
@@ -81,6 +84,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
       rows
     );
     const comparisonReport = buildComparisonReport(rows);
+    const analysisReports = buildAnalysisReports(rows);
 
     if (rows.length === 0) {
       errors.push('Não foi possível identificar linhas contábeis neste arquivo.');
@@ -98,6 +102,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
       invertedRows,
       zeroMovementRows,
       comparisonReport,
+      analysisReports,
       errors
     };
   } catch (error) {
@@ -113,6 +118,7 @@ export async function parsePdfFile(file: File): Promise<CompanyReport> {
       invertedRows: [],
       zeroMovementRows: [],
       comparisonReport: buildComparisonReport([]),
+      analysisReports: buildAnalysisReports([]),
       errors: ['Não foi possível ler este PDF. Verifique se o arquivo está no formato esperado.']
     };
   }
@@ -141,7 +147,7 @@ function groupItemsIntoLines(items: TextItem[]): PageLine[] {
       const gap = index === 0 ? 0 : item.x - previousX;
       if (index > 0 && gap > 12) pieces.push(' ');
       pieces.push(item.text);
-      previousX = item.x + Math.max(item.text.length * 4, 8);
+      previousX = item.x + Math.max(item.width, 8);
     });
 
     return {
@@ -266,8 +272,10 @@ function parseLedgerLine(rawLine: string, page: number): LedgerLine | null {
     code,
     page,
     raw,
+    previousBalanceNumber: parseBrazilianMoney(previousBalance),
     debitNumber: parseBrazilianMoney(debit),
-    creditNumber: parseBrazilianMoney(credit)
+    creditNumber: parseBrazilianMoney(credit),
+    currentBalanceNumber: parseBrazilianMoney(currentBalance)
   };
 }
 
@@ -344,12 +352,244 @@ function buildComparisonReport(rows: LedgerLine[]): BalanceComparisonReport {
   };
 }
 
+function buildAnalysisReports(rows: LedgerLine[]): AnalysisReport[] {
+  return [
+    buildAnalysis1(rows),
+    buildAnalysis2(rows),
+    buildAnalysis3(rows),
+    buildAnalysis4(rows),
+    buildAnalysis5(rows),
+    buildAnalysis6(rows),
+    buildAnalysis7(rows),
+    buildAnalysis8(rows),
+    buildAnalysis9(rows)
+  ];
+}
+
+function buildAnalysis1(rows: LedgerLine[]): AnalysisReport {
+  const clientRow = findAccountRow(rows, '1.1.02');
+  const isAttention = Boolean(
+    clientRow && balanceNature(clientRow.currentBalance) === 'D' && absoluteValue(clientRow.currentBalance) < 10
+  );
+
+  return {
+    kind: 'analysis1',
+    title: 'Clientes com Saldo Atual Baixo',
+    intro: 'Destaca a conta Clientes quando o saldo atual devedor fica abaixo de 10,00, para chamar atenção para saldos muito pequenos na conta sintética.',
+    message: clientRow
+      ? isAttention
+        ? 'Atenção: a conta 1.1.02 (CLIENTES) está com S. Atual menor que 10 e natureza D.'
+        : 'Tudo OK: a conta 1.1.02 (CLIENTES) não está com S. Atual menor que 10D.'
+      : 'Atenção: a conta 1.1.02 (CLIENTES) não foi localizada no PDF.',
+    rows: isAttention && clientRow ? [clientRow] : [],
+    isAttention: !clientRow || isAttention
+  };
+}
+
+function buildAnalysis2(rows: LedgerLine[]): AnalysisReport {
+  const matchedRows = rows.filter(
+    (row) => row.code === '142' && normalizeForCompare(row.name) === 'CLIENTE PESSOA FISICA'
+  );
+  const flaggedRows = matchedRows.filter((row) => {
+    const previousIsZero = isZeroMoney(row.previousBalance, row.previousBalanceNumber);
+    const currentIsZero = isZeroMoney(row.currentBalance, row.currentBalanceNumber);
+    const debitEqualsCredit = numbersAreEqual(row.debitNumber, row.creditNumber);
+    return !previousIsZero || !currentIsZero || !debitEqualsCredit;
+  });
+
+  return {
+    kind: 'analysis2',
+    title: 'Cliente Pessoa Física Fora da Regra',
+    intro: 'Valida se a linha Cliente Pessoa Física com Cod. R. 142 está zerada em saldo anterior e saldo atual, e se débito e crédito permanecem iguais.',
+    message:
+      matchedRows.length === 0
+        ? 'Atenção: nenhuma linha com nome Cliente Pessoa Física e Cod. R. 142 foi localizada.'
+        : flaggedRows.length > 0
+          ? 'Atenção: foram encontradas linhas de Cliente Pessoa Física com Cod. R. 142 fora da regra.'
+          : 'Tudo OK: as linhas de Cliente Pessoa Física com Cod. R. 142 seguem as regras informadas.',
+    rows: flaggedRows,
+    isAttention: matchedRows.length === 0 || flaggedRows.length > 0
+  };
+}
+
+function buildAnalysis3(rows: LedgerLine[]): AnalysisReport {
+  const clientRow = findAccountRow(rows, '1.1.02');
+  const merchandiseRows = rows.filter((row) => row.code === '2652');
+  const serviceRows = rows.filter((row) => row.code === '2700');
+  const merchandiseCredit = sumCredits(merchandiseRows);
+  const serviceCredit = sumCredits(serviceRows);
+  const targetValue = merchandiseCredit + serviceCredit;
+  const hasMissingRows = !clientRow || merchandiseRows.length === 0 || serviceRows.length === 0;
+  const isAttention = hasMissingRows || !numbersAreEqual(clientRow?.debitNumber, targetValue);
+  const calculationRows = [clientRow, ...merchandiseRows, ...serviceRows].filter(Boolean) as LedgerLine[];
+
+  return {
+    kind: 'analysis3',
+    title: 'Conciliação Clientes x Receitas Operacionais',
+    intro: 'Compara o débito da conta Clientes com a soma dos créditos das receitas de vendas de mercadorias e prestação de serviços.',
+    message: hasMissingRows
+      ? 'Atenção: não foi possível localizar a conta 1.1.02 e/ou as linhas de Cod. R. 2652 e 2700 para comparação.'
+      : isAttention
+        ? 'Atenção: o Débito da conta 1.1.02 difere da soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652) e Prestação de Serviços (Cod. R. 2700).'
+        : 'Tudo OK: o Débito da conta 1.1.02 está igual à soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652) e Prestação de Serviços (Cod. R. 2700).',
+    rows: isAttention ? calculationRows : [],
+    isAttention,
+    calculation: {
+      formula: 'Débito de Clientes (1.1.02) deve ser igual ao Crédito Cod. R. 2652 + Crédito Cod. R. 2700.',
+      items: [
+        { label: 'Débito de Clientes (1.1.02)', value: clientRow?.debitNumber ?? 0 },
+        { label: 'Crédito Cod. R. 2652', value: merchandiseCredit },
+        { label: 'Crédito Cod. R. 2700', value: serviceCredit },
+        { label: 'Soma das receitas', value: targetValue },
+        { label: 'Diferença', value: (clientRow?.debitNumber ?? 0) - targetValue }
+      ]
+    }
+  };
+}
+
+function buildAnalysis4(rows: LedgerLine[]): AnalysisReport {
+  const clientRows = findAccountFamily(rows, '1.1.02').filter(
+    (row) =>
+      balanceNature(row.currentBalance) === 'D' &&
+      absoluteValue(row.currentBalance) > 0 &&
+      absoluteValue(row.currentBalance) <= 10
+  );
+
+  return {
+    kind: 'analysis4',
+    title: 'Clientes com Saldo Residual',
+    intro: 'Mostra Clientes e subcontas com saldo atual devedor residual, acima de zero e até 10,00, para facilitar a revisão de pequenos saldos em aberto.',
+    message:
+      clientRows.length > 0
+        ? 'Atenção: foram encontrados Clientes e/ou subitens com S. Atual maior que 0 e menor ou igual a 10D.'
+        : 'Tudo OK: não foram encontrados Clientes ou subitens com S. Atual entre 0 e 10D.',
+    rows: clientRows,
+    isAttention: clientRows.length > 0
+  };
+}
+
+function buildAnalysis5(rows: LedgerLine[]): AnalysisReport {
+  const flaggedRows = findAccountFamily(rows, '1.1.02').filter(
+    (row) => absoluteValue(row.previousBalance) > 0 && row.debitNumber > 0 && isZeroMoney(row.credit, row.creditNumber)
+  );
+
+  return {
+    kind: 'analysis5',
+    title: 'Clientes sem Crédito no Período',
+    intro: 'Lista Clientes e subcontas com saldo anterior e débito positivos, mas sem crédito no período, para revisar ausência de baixa ou compensação.',
+    message:
+      flaggedRows.length > 0
+        ? 'Atenção: foram encontrados Clientes e/ou subitens com S. Anterior e Débito maiores que zero e Crédito zerado.'
+        : 'Tudo OK: não foram encontrados Clientes ou subitens nesta condição.',
+    rows: flaggedRows,
+    isAttention: flaggedRows.length > 0
+  };
+}
+
+function buildAnalysis6(rows: LedgerLine[]): AnalysisReport {
+  const flaggedRows = findAccountFamily(rows, '2.1.03').filter(
+    (row) =>
+      absoluteValue(row.previousBalance) > 0 &&
+      row.creditNumber > 0 &&
+      absoluteValue(row.currentBalance) > 0 &&
+      isZeroMoney(row.debit, row.debitNumber)
+  );
+
+  return {
+    kind: 'analysis6',
+    title: 'Fornecedores sem Débito no Período',
+    intro: 'Destaca Fornecedores e subcontas com saldo anterior, crédito e saldo atual positivos, mas sem débito no período, para revisar movimentações pendentes.',
+    message:
+      flaggedRows.length > 0
+        ? 'Atenção: foram encontrados Fornecedores e/ou subitens com Débito zerado e S. Anterior, Crédito e S. Atual positivos.'
+        : 'Tudo OK: não foram encontrados Fornecedores ou subitens nesta condição.',
+    rows: flaggedRows,
+    isAttention: flaggedRows.length > 0
+  };
+}
+
+function buildAnalysis7(rows: LedgerLine[]): AnalysisReport {
+  const stockRow = findAccountRow(rows, '1.1.08');
+  const supplierRow = findAccountRow(rows, '2.1.03');
+  const hasMissingRows = !stockRow || !supplierRow;
+  const isAttention = hasMissingRows || stockRow.debitNumber > supplierRow.creditNumber;
+
+  return {
+    kind: 'analysis7',
+    title: 'Validação Estoques x Fornecedores',
+    intro: 'Confere se o débito da conta Estoques não supera o crédito da conta Fornecedores, ajudando a validar coerência entre compras e obrigações.',
+    message: hasMissingRows
+      ? 'Atenção: não foi possível localizar a conta 1.1.08 e/ou a conta 2.1.03 para comparação.'
+      : isAttention
+        ? 'Atenção: o Débito da conta 1.1.08 está maior que o Crédito da conta 2.1.03.'
+        : 'Tudo OK: o Débito da conta 1.1.08 não está maior que o Crédito da conta 2.1.03.',
+    rows: isAttention ? [stockRow, supplierRow].filter(Boolean) as LedgerLine[] : [],
+    isAttention
+  };
+}
+
+function buildAnalysis8(rows: LedgerLine[]): AnalysisReport {
+  const supplierRows = findAccountFamily(rows, '2.1.03').filter(
+    (row) =>
+      balanceNature(row.currentBalance) === 'C' &&
+      absoluteValue(row.currentBalance) > 0 &&
+      absoluteValue(row.currentBalance) <= 10
+  );
+
+  return {
+    kind: 'analysis8',
+    title: 'Fornecedores com Saldo Residual',
+    intro: 'Mostra Fornecedores e subcontas com saldo atual credor residual, acima de zero e até 10,00, para revisão de pequenos saldos pendentes.',
+    message:
+      supplierRows.length > 0
+        ? 'Atenção: foram encontrados Fornecedores e/ou subitens com S. Atual maior que 0 e menor ou igual a 10C.'
+        : 'Tudo OK: não foram encontrados Fornecedores ou subitens com S. Atual entre 0 e 10C.',
+    rows: supplierRows,
+    isAttention: supplierRows.length > 0
+  };
+}
+
+function buildAnalysis9(rows: LedgerLine[]): AnalysisReport {
+  const flaggedRows = findAccountFamily(rows, '2.1.03').filter(
+    (row) => absoluteValue(row.previousBalance) > 0 && row.creditNumber > 0 && isZeroMoney(row.debit, row.debitNumber)
+  );
+
+  return {
+    kind: 'analysis9',
+    title: 'Fornecedores com Crédito sem Débito',
+    intro: 'Lista Fornecedores e subcontas com saldo anterior e crédito positivos, mas sem débito no período, para revisão de baixas não realizadas.',
+    message:
+      flaggedRows.length > 0
+        ? 'Atenção: foram encontrados Fornecedores e/ou subitens com S. Anterior e Crédito maiores que zero e Débito zerado.'
+        : 'Tudo OK: não foram encontrados Fornecedores ou subitens nesta condição.',
+    rows: flaggedRows,
+    isAttention: flaggedRows.length > 0
+  };
+}
+
 function findAccountRow(rows: LedgerLine[], account: string): LedgerLine | undefined {
   return rows.find((row) => row.account === account);
 }
 
+function findAccountFamily(rows: LedgerLine[], account: string): LedgerLine[] {
+  return rows.filter((row) => row.account === account || row.account.startsWith(`${account}.`));
+}
+
 function absoluteCurrentBalance(row?: LedgerLine): number {
   return row ? Math.abs(parseBrazilianMoney(row.currentBalance)) : 0;
+}
+
+function absoluteValue(value: string): number {
+  return Math.abs(parseBrazilianMoney(value));
+}
+
+function numbersAreEqual(left?: number, right?: number): boolean {
+  if (left === undefined || right === undefined) return false;
+  return Math.abs(left - right) < 0.005;
+}
+
+function sumCredits(rows: LedgerLine[]): number {
+  return rows.reduce((sum, row) => sum + row.creditNumber, 0);
 }
 
 function signedCurrentBalance(row?: LedgerLine): number {

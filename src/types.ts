@@ -10,8 +10,10 @@ export interface LedgerLine {
   code?: string;
   page?: number;
   raw: string;
+  previousBalanceNumber: number;
   debitNumber: number;
   creditNumber: number;
+  currentBalanceNumber: number;
 }
 
 export interface UnclassifiedLine {
@@ -32,6 +34,7 @@ export interface CompanyReport {
   invertedRows: InvertedBalanceRow[];
   zeroMovementRows: LedgerLine[];
   comparisonReport: BalanceComparisonReport;
+  analysisReports: AnalysisReport[];
   errors: string[];
 }
 
@@ -52,4 +55,35 @@ export interface BalanceComparisonReport {
   message: string;
 }
 
-export type ReportKind = 'inverted' | 'zero' | 'comparison';
+export type AnalysisKind =
+  | 'analysis1'
+  | 'analysis2'
+  | 'analysis3'
+  | 'analysis4'
+  | 'analysis5'
+  | 'analysis6'
+  | 'analysis7'
+  | 'analysis8'
+  | 'analysis9';
+
+export interface AnalysisReport {
+  kind: AnalysisKind;
+  title: string;
+  intro: string;
+  message: string;
+  rows: LedgerLine[];
+  isAttention: boolean;
+  calculation?: AnalysisCalculation;
+}
+
+export type ReportKind = 'inverted' | 'zero' | 'comparison' | AnalysisKind;
+
+export interface AnalysisCalculation {
+  formula: string;
+  items: AnalysisCalculationItem[];
+}
+
+export interface AnalysisCalculationItem {
+  label: string;
+  value: number;
+}
