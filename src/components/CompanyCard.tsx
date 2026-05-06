@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnalysisKind, CompanyReport, ReportKind } from '../types';
 import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, parseBrazilianMoney } from '../utils/format';
 import {
@@ -8,7 +8,9 @@ import {
   downloadPdf,
   downloadXlsx,
   hasExportContent,
+  reportHasOccurrence,
   reportIntro,
+  reportOccurrenceCount,
   reportRows,
   reportTabs,
   reportTitle
@@ -21,12 +23,26 @@ interface CompanyCardProps {
 
 export function CompanyCard({ company }: CompanyCardProps) {
   const [activeTab, setActiveTab] = useState<ReportKind>('inverted');
-  const activeRows = useMemo(() => reportRows(company, activeTab), [company, activeTab]);
-  const activeTitle = reportTitle(activeTab, company);
-  const activeIntro = reportIntro(activeTab, company);
+  const [showHiddenReports, setShowHiddenReports] = useState(false);
+  const visibleTabs = useMemo(() => reportTabs.filter((tab) => reportHasOccurrence(company, tab.kind)), [company]);
+  const displayedTabs = showHiddenReports ? reportTabs : visibleTabs;
+  const hiddenReportsCount = reportTabs.length - visibleTabs.length;
+  const effectiveTab = displayedTabs.find((tab) => tab.kind === activeTab)?.kind ?? displayedTabs[0]?.kind;
+  const activeRows = useMemo(() => (effectiveTab ? reportRows(company, effectiveTab) : []), [company, effectiveTab]);
+  const activeTitle = effectiveTab ? reportTitle(effectiveTab, company) : 'Relatorios ocultos';
+  const activeIntro = effectiveTab ? reportIntro(effectiveTab, company) : 'Nenhum relatorio com ocorrencia esta visivel no momento.';
   const exportEnabled = hasExportContent(company);
   const companySummary = useMemo(() => buildCompanySummary(company), [company]);
-  const activeReportMeta = useMemo(() => buildReportMeta(company, activeTab), [company, activeTab]);
+  const activeReportMeta = useMemo(
+    () => (effectiveTab ? buildReportMeta(company, effectiveTab) : { count: 0, hasAttention: false }),
+    [company, effectiveTab]
+  );
+
+  useEffect(() => {
+    if (effectiveTab && effectiveTab !== activeTab) {
+      setActiveTab(effectiveTab);
+    }
+  }, [activeTab, effectiveTab]);
 
   const activeWithCredit = company.invertedRows.filter((row) => row.alertType === 'Ativo com saldo C').length;
   const passiveWithDebit = company.invertedRows.filter((row) => row.alertType === 'Passivo/PL com saldo D').length;
@@ -74,8 +90,18 @@ export function CompanyCard({ company }: CompanyCardProps) {
         </div>
       )}
 
+      <div className="tabsHeader">
+        {hiddenReportsCount > 0 && (
+          <button type="button" className="toggleHiddenButton" onClick={() => setShowHiddenReports((current) => !current)}>
+            {showHiddenReports
+              ? `Ocultar relatorios sem ocorrencia (${hiddenReportsCount})`
+              : `Mostrar relatorios ocultos (${hiddenReportsCount})`}
+          </button>
+        )}
+      </div>
+
       <div className="tabs" role="tablist" aria-label="Relatorios">
-        {reportTabs.map((tab) => {
+        {displayedTabs.map((tab) => {
           const meta = buildReportMeta(company, tab.kind);
           return (
             <button
@@ -104,17 +130,17 @@ export function CompanyCard({ company }: CompanyCardProps) {
                 {activeReportMeta.count} {activeReportMeta.count === 1 ? 'ocorrencia' : 'ocorrencias'}
               </span>
             </div>
-            {activeTab === 'inverted' ? (
+            {effectiveTab === 'inverted' ? (
               <div className="summaryGrid">
                 <Summary label="Ativo com saldo C" value={activeWithCredit} />
                 <Summary label="Passivo/PL com saldo D" value={passiveWithDebit} />
                 <Summary label="Total" value={company.invertedRows.length} />
               </div>
-            ) : activeTab === 'zero' ? (
+            ) : effectiveTab === 'zero' ? (
               <div className="summaryGrid single">
                 <Summary label="Total de contas encontradas" value={company.zeroMovementRows.length} />
               </div>
-            ) : activeTab === 'comparison' ? (
+            ) : effectiveTab === 'comparison' ? (
               <ComparisonSummary company={company} />
             ) : (
               <div className="summaryGrid single">
@@ -132,14 +158,16 @@ export function CompanyCard({ company }: CompanyCardProps) {
           </div>
         </div>
 
-        {activeTab === 'comparison' ? (
+        {!effectiveTab ? (
+          <div className="emptyState">Nenhum relatorio com ocorrencia esta visivel. Use o botao acima para mostrar os relatorios ocultos.</div>
+        ) : effectiveTab === 'comparison' ? (
           <ComparisonPanel company={company} />
-        ) : isAnalysisKind(activeTab) ? (
-          <AnalysisPanel company={company} kind={activeTab} />
+        ) : isAnalysisKind(effectiveTab) ? (
+          <AnalysisPanel company={company} kind={effectiveTab} />
         ) : activeRows.length === 0 ? (
-          <div className="emptyState">{emptyStateMessage(activeTab)}</div>
+          <div className="emptyState">{emptyStateMessage(effectiveTab)}</div>
         ) : (
-          <DataTable rows={activeRows} kind={activeTab} />
+          <DataTable rows={activeRows} kind={effectiveTab} />
         )}
 
         {company.unclassified.length > 0 && (
@@ -386,22 +414,10 @@ function buildCompanySummary(company: CompanyReport) {
 }
 
 function buildReportMeta(company: CompanyReport, kind: ReportKind) {
-  if (kind === 'inverted') {
-    return { count: company.invertedRows.length, hasAttention: company.invertedRows.length > 0 };
-  }
-  if (kind === 'zero') {
-    return { count: company.zeroMovementRows.length, hasAttention: company.zeroMovementRows.length > 0 };
-  }
-  if (kind === 'comparison') {
-    return { count: company.comparisonReport.isAttention ? 1 : 0, hasAttention: company.comparisonReport.isAttention };
-  }
-
-  const report = company.analysisReports.find((item) => item.kind === kind);
-  const count = report ? (report.rows.length > 0 ? report.rows.length : report.isAttention ? 1 : 0) : 0;
-
+  const count = reportOccurrenceCount(company, kind);
   return {
     count,
-    hasAttention: report?.isAttention ?? false
+    hasAttention: count > 0
   };
 }
 

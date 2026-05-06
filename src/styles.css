@@ -363,6 +363,22 @@ main {
   border: 1px solid #fed7aa;
 }
 
+.tabsHeader {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.toggleHiddenButton {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid #d8e4e8;
+  background: #f7fafb;
+  color: #29444b;
+  font-weight: 700;
+}
+
 .tabs {
   display: flex;
   gap: 8px;

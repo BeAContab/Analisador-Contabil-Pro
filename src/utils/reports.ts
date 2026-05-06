@@ -59,6 +59,20 @@ export function reportRows(company: CompanyReport, kind: ReportKind) {
   return company.analysisReports.find((report) => report.kind === kind)?.rows ?? [];
 }
 
+export function reportOccurrenceCount(company: CompanyReport, kind: ReportKind) {
+  if (kind === 'inverted') return company.invertedRows.length;
+  if (kind === 'zero') return company.zeroMovementRows.length;
+  if (kind === 'comparison') return company.comparisonReport.isAttention ? 1 : 0;
+
+  const report = company.analysisReports.find((item) => item.kind === kind);
+  if (!report) return 0;
+  return report.rows.length > 0 ? report.rows.length : report.isAttention ? 1 : 0;
+}
+
+export function reportHasOccurrence(company: CompanyReport, kind: ReportKind) {
+  return reportOccurrenceCount(company, kind) > 0;
+}
+
 export function reportTitle(kind: ReportKind, company?: CompanyReport): string {
   if (kind === 'inverted') return 'Saldos invertidos Ativo/Passivo';
   if (kind === 'zero') return 'Contas sem movimentacao no periodo';
@@ -100,64 +114,61 @@ export function reportFileName(company: CompanyReport, extension: 'xlsx' | 'pdf'
 }
 
 export function hasExportContent(company: CompanyReport): boolean {
-  return (
-    company.invertedRows.length > 0 ||
-    company.zeroMovementRows.length > 0 ||
-    Boolean(
-      company.comparisonReport.distributionRow ||
-        company.comparisonReport.account3Row ||
-        company.comparisonReport.account6Row ||
-        company.comparisonReport.account2413Row
-    ) ||
-    company.analysisReports.some((report) => report.rows.length > 0 || report.message.length > 0)
-  );
+  return reportTabs.some((tab) => reportHasOccurrence(company, tab.kind));
 }
 
 export function downloadXlsx(company: CompanyReport) {
   const workbook = XLSX.utils.book_new();
   const createdAt = nowLabel();
 
-  XLSX.utils.book_append_sheet(
-    workbook,
-    buildWorksheet(
-      company,
-      reportTitle('inverted'),
-      balanceColumns,
-      balanceBody(company.invertedRows),
-      createdAt,
-      undefined,
-      reportIntro('inverted')
-    ),
-    'Saldos invertidos'
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    buildWorksheet(
-      company,
-      reportTitle('zero'),
-      balanceColumns,
-      balanceBody(company.zeroMovementRows),
-      createdAt,
-      undefined,
-      reportIntro('zero')
-    ),
-    'Sem movimentacao'
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    buildWorksheet(
-      company,
-      reportTitle('comparison'),
-      comparisonColumns,
-      comparisonBody(company),
-      createdAt,
-      company.comparisonReport.message,
-      reportIntro('comparison')
-    ),
-    'Comparacao'
-  );
+  if (reportHasOccurrence(company, 'inverted')) {
+    XLSX.utils.book_append_sheet(
+      workbook,
+      buildWorksheet(
+        company,
+        reportTitle('inverted'),
+        balanceColumns,
+        balanceBody(company.invertedRows),
+        createdAt,
+        undefined,
+        reportIntro('inverted')
+      ),
+      'Saldos invertidos'
+    );
+  }
+  if (reportHasOccurrence(company, 'zero')) {
+    XLSX.utils.book_append_sheet(
+      workbook,
+      buildWorksheet(
+        company,
+        reportTitle('zero'),
+        balanceColumns,
+        balanceBody(company.zeroMovementRows),
+        createdAt,
+        undefined,
+        reportIntro('zero')
+      ),
+      'Sem movimentacao'
+    );
+  }
+  if (reportHasOccurrence(company, 'comparison')) {
+    XLSX.utils.book_append_sheet(
+      workbook,
+      buildWorksheet(
+        company,
+        reportTitle('comparison'),
+        comparisonColumns,
+        comparisonBody(company),
+        createdAt,
+        company.comparisonReport.message,
+        reportIntro('comparison')
+      ),
+      'Comparacao'
+    );
+  }
 
   analysisOrder.forEach((kind, index) => {
+    if (!reportHasOccurrence(company, kind)) return;
     XLSX.utils.book_append_sheet(
       workbook,
       buildWorksheet(
@@ -192,35 +203,42 @@ export function downloadPdf(company: CompanyReport) {
   doc.text(`Gerado em: ${createdAt}`, 40, 138);
 
   let nextY = 166;
-  nextY = addPdfSection(
-    doc,
-    reportTitle('inverted'),
-    balanceColumns,
-    balanceBody(company.invertedRows),
-    nextY,
-    undefined,
-    reportIntro('inverted')
-  );
-  nextY = addPdfSection(
-    doc,
-    reportTitle('zero'),
-    balanceColumns,
-    balanceBody(company.zeroMovementRows),
-    nextY + 34,
-    undefined,
-    reportIntro('zero')
-  );
-  nextY = addPdfSection(
-    doc,
-    reportTitle('comparison'),
-    comparisonColumns,
-    comparisonBody(company),
-    nextY + 34,
-    company.comparisonReport.message,
-    reportIntro('comparison')
-  );
+  if (reportHasOccurrence(company, 'inverted')) {
+    nextY = addPdfSection(
+      doc,
+      reportTitle('inverted'),
+      balanceColumns,
+      balanceBody(company.invertedRows),
+      nextY,
+      undefined,
+      reportIntro('inverted')
+    );
+  }
+  if (reportHasOccurrence(company, 'zero')) {
+    nextY = addPdfSection(
+      doc,
+      reportTitle('zero'),
+      balanceColumns,
+      balanceBody(company.zeroMovementRows),
+      nextY + 34,
+      undefined,
+      reportIntro('zero')
+    );
+  }
+  if (reportHasOccurrence(company, 'comparison')) {
+    nextY = addPdfSection(
+      doc,
+      reportTitle('comparison'),
+      comparisonColumns,
+      comparisonBody(company),
+      nextY + 34,
+      company.comparisonReport.message,
+      reportIntro('comparison')
+    );
+  }
 
   analysisOrder.forEach((kind) => {
+    if (!reportHasOccurrence(company, kind)) return;
     nextY = addPdfSection(
       doc,
       reportTitle(kind, company),
