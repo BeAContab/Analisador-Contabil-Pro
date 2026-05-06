@@ -79,7 +79,7 @@ export function DataTable({ rows }: DataTableProps) {
             {filteredRows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="emptyCell">
-                  Nenhum resultado encontrado.
+                  Nenhuma linha encontrada para os filtros aplicados.
                 </td>
               </tr>
             ) : (

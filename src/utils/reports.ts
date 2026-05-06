@@ -84,13 +84,13 @@ export function analysisCalculation(company: CompanyReport, kind: AnalysisKind):
 
 export function reportIntro(kind: ReportKind, company?: CompanyReport): string {
   if (kind === 'inverted') {
-    return 'Aponta contas do ativo com saldo credor e contas do passivo ou patrimonio liquido com saldo devedor, sinalizando possiveis inversoes de natureza.';
+    return 'Mostra contas do ativo com S. Atual credor e contas do passivo ou patrimonio liquido com S. Atual devedor.';
   }
   if (kind === 'zero') {
-    return 'Lista contas sem movimentacao no periodo, isto e, com debito e credito zerados.';
+    return 'Mostra contas com Debito igual a zero e Credito igual a zero no periodo.';
   }
   if (kind === 'comparison') {
-    return 'Compara distribuicao antecipada de lucros com o resultado apurado, usando as contas de referencia configuradas no projeto.';
+    return 'Caso 1: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) for maior que 0, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO), 6 (RESULTADO E REGULARIZACAO) e 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS) MENOS 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS).\n\nResumo: (3 + 6 + 2.4.13) - 1.1.04.019\n\nCaso 2: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) estiver zerada ou nao existir, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO) e 6 (RESULTADO E REGULARIZACAO) MENOS a conta 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS).\n\nResumo: (3 + 6) - 2.4.13';
   }
   return company ? analysisIntro(company, kind) : '';
 }
@@ -351,12 +351,26 @@ function comparisonBody(company: CompanyReport) {
     ['Formula', '', '', comparisonFormula(company), '', '', status]
   ];
 
-  rows.push(comparisonRow('Conta 3', comparisonReport.account3Row, signedCurrentBalance(comparisonReport.account3Row), status));
-  rows.push(comparisonRow('Conta 6', comparisonReport.account6Row, signedCurrentBalance(comparisonReport.account6Row), status));
+  rows.push(
+    comparisonRow(
+      comparisonLabel('Conta 3', comparisonReport.account3Row),
+      comparisonReport.account3Row,
+      signedCurrentBalance(comparisonReport.account3Row),
+      status
+    )
+  );
+  rows.push(
+    comparisonRow(
+      comparisonLabel('Conta 6', comparisonReport.account6Row),
+      comparisonReport.account6Row,
+      signedCurrentBalance(comparisonReport.account6Row),
+      status
+    )
+  );
   if (comparisonReport.mode === 'distribution') {
     rows.push(
       comparisonRow(
-        'Conta 2.4.13',
+        comparisonLabel('Conta 2.4.13', comparisonReport.account2413Row),
         comparisonReport.account2413Row,
         signedCurrentBalance(comparisonReport.account2413Row),
         status
@@ -365,7 +379,9 @@ function comparisonBody(company: CompanyReport) {
   }
   rows.push(
     comparisonRow(
-      comparisonReport.mode === 'fallback' ? 'Conta comparada: 2.4.13' : 'Conta comparada: 1.1.04.019',
+      comparisonReport.mode === 'fallback'
+        ? comparisonLabel('Conta comparada: 2.4.13', comparisonReport.account2413Row)
+        : comparisonLabel('Conta comparada: 1.1.04.019', comparisonReport.distributionRow),
       comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow,
       comparisonReport.targetValue,
       status
@@ -417,6 +433,10 @@ function comparisonRow(label: string, row: LedgerLine | undefined, value: number
   ];
 }
 
+function comparisonLabel(prefix: string, row?: LedgerLine) {
+  return row ? `${prefix} (${row.name})` : prefix;
+}
+
 function signedCurrentBalance(row?: LedgerLine): number {
   if (!row) return 0;
   const value = Math.abs(parseBrazilianMoney(row.currentBalance));
@@ -426,10 +446,10 @@ function signedCurrentBalance(row?: LedgerLine): number {
 function comparisonFormula(company: CompanyReport): string {
   const { comparisonReport } = company;
   if (comparisonReport.mode === 'fallback') {
-    return 'Soma calculada = Conta 3 + Conta 6. Comparacao = Soma calculada - Conta 2.4.13.';
+    return 'Caso 2: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) estiver zerada ou nao existir, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO) e 6 (RESULTADO E REGULARIZACAO) MENOS a conta 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS). Resumo: (3 + 6) - 2.4.13.';
   }
 
-  return 'Soma calculada = Conta 3 + Conta 6 + Conta 2.4.13. Comparacao = Soma calculada - Conta 1.1.04.019.';
+  return 'Caso 1: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) for maior que 0, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO), 6 (RESULTADO E REGULARIZACAO) e 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS) MENOS 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS). Resumo: (3 + 6 + 2.4.13) - 1.1.04.019.';
 }
 
 function getFinalY(doc: jsPDF) {

@@ -321,10 +321,12 @@ function buildComparisonReport(rows: LedgerLine[]): BalanceComparisonReport {
     ? signedCurrentBalance(account3Row) + signedCurrentBalance(account6Row)
     : signedCurrentBalance(account3Row) + signedCurrentBalance(account6Row) + signedCurrentBalance(account2413Row);
   const targetValue = shouldUseFallback ? absoluteCurrentBalance(account2413Row) : distributionValue;
-  const difference = baseValue - targetValue;
+  const comparableBaseValue = shouldUseFallback ? Math.abs(baseValue) : baseValue;
+  const comparableTargetValue = shouldUseFallback ? Math.abs(targetValue) : targetValue;
+  const difference = comparableBaseValue - comparableTargetValue;
   const hasMissingRows =
     !account3Row || (shouldUseFallback ? !account2413Row : !distributionRow || !account2413Row);
-  const isAttention = hasMissingRows || baseValue < targetValue;
+  const isAttention = hasMissingRows || comparableBaseValue < comparableTargetValue;
 
   let message = shouldUseFallback
     ? 'Tudo OK: a soma das contas 3 e 6 é maior que o S. Atual da conta 2.4.13.'
@@ -332,7 +334,7 @@ function buildComparisonReport(rows: LedgerLine[]): BalanceComparisonReport {
 
   if (hasMissingRows) {
     message = 'Atenção: não foi possível localizar todas as contas necessárias para a comparação.';
-  } else if (baseValue < targetValue) {
+  } else if (comparableBaseValue < comparableTargetValue) {
     message = shouldUseFallback
       ? 'Atenção: a soma das contas 3 e 6 está menor que o S. Atual da conta 2.4.13.'
       : 'Atenção: a soma das contas 3, 6 e 2.4.13 está menor que o S. Atual da conta 1.1.04.019.';
@@ -375,7 +377,7 @@ function buildAnalysis1(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis1',
     title: 'Clientes com Saldo Atual Baixo',
-    intro: 'Destaca a conta Clientes quando o saldo atual devedor fica abaixo de 10,00, para chamar atenção para saldos muito pequenos na conta sintética.',
+    intro: 'Mostra a conta 1.1.02 (Clientes) apenas quando o S. Atual estiver com natureza D e valor menor que 10,00.',
     message: clientRow
       ? isAttention
         ? 'Atenção: a conta 1.1.02 (CLIENTES) está com S. Atual menor que 10 e natureza D.'
@@ -400,7 +402,7 @@ function buildAnalysis2(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis2',
     title: 'Cliente Pessoa Física Fora da Regra',
-    intro: 'Valida se a linha Cliente Pessoa Física com Cod. R. 142 está zerada em saldo anterior e saldo atual, e se débito e crédito permanecem iguais.',
+    intro: 'Procura a linha Cliente Pessoa Física com Cod. R. 142 e alerta quando S. Anterior ou S. Atual não estão zerados, ou quando Débito e Crédito são diferentes.',
     message:
       matchedRows.length === 0
         ? 'Atenção: nenhuma linha com nome Cliente Pessoa Física e Cod. R. 142 foi localizada.'
@@ -426,7 +428,7 @@ function buildAnalysis3(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis3',
     title: 'Conciliação Clientes x Receitas Operacionais',
-    intro: 'Compara o débito da conta Clientes com a soma dos créditos das receitas de vendas de mercadorias e prestação de serviços.',
+    intro: 'Compara o Débito da conta 1.1.02 (Clientes) com a soma dos Créditos das linhas de Cod. R. 2652 e 2700.',
     message: hasMissingRows
       ? 'Atenção: não foi possível localizar a conta 1.1.02 e/ou as linhas de Cod. R. 2652 e 2700 para comparação.'
       : isAttention
@@ -435,11 +437,12 @@ function buildAnalysis3(rows: LedgerLine[]): AnalysisReport {
     rows: isAttention ? calculationRows : [],
     isAttention,
     calculation: {
-      formula: 'Débito de Clientes (1.1.02) deve ser igual ao Crédito Cod. R. 2652 + Crédito Cod. R. 2700.',
+      formula:
+        'Débito da conta 1.1.02 (Clientes) deve ser igual ao Crédito das linhas Cod. R. 2652 (Vendas de Mercadorias) mais Cod. R. 2700 (Prestação de Serviços).',
       items: [
-        { label: 'Débito de Clientes (1.1.02)', value: clientRow?.debitNumber ?? 0 },
-        { label: 'Crédito Cod. R. 2652', value: merchandiseCredit },
-        { label: 'Crédito Cod. R. 2700', value: serviceCredit },
+        { label: 'Débito de 1.1.02 (CLIENTES)', value: clientRow?.debitNumber ?? 0 },
+        { label: 'Crédito Cod. R. 2652 (VENDAS DE MERCADORIAS)', value: merchandiseCredit },
+        { label: 'Crédito Cod. R. 2700 (PRESTAÇÃO DE SERVIÇOS)', value: serviceCredit },
         { label: 'Soma das receitas', value: targetValue },
         { label: 'Diferença', value: (clientRow?.debitNumber ?? 0) - targetValue }
       ]
@@ -458,7 +461,7 @@ function buildAnalysis4(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis4',
     title: 'Clientes com Saldo Residual',
-    intro: 'Mostra Clientes e subcontas com saldo atual devedor residual, acima de zero e até 10,00, para facilitar a revisão de pequenos saldos em aberto.',
+    intro: 'Mostra contas da família 1.1.02 quando o S. Atual estiver com natureza D, maior que 0 e menor ou igual a 10,00.',
     message:
       clientRows.length > 0
         ? 'Atenção: foram encontrados Clientes e/ou subitens com S. Atual maior que 0 e menor ou igual a 10D.'
@@ -476,7 +479,7 @@ function buildAnalysis5(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis5',
     title: 'Clientes sem Crédito no Período',
-    intro: 'Lista Clientes e subcontas com saldo anterior e débito positivos, mas sem crédito no período, para revisar ausência de baixa ou compensação.',
+    intro: 'Mostra contas da família 1.1.02 quando S. Anterior e Débito são maiores que zero e o Crédito está zerado.',
     message:
       flaggedRows.length > 0
         ? 'Atenção: foram encontrados Clientes e/ou subitens com S. Anterior e Débito maiores que zero e Crédito zerado.'
@@ -498,7 +501,7 @@ function buildAnalysis6(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis6',
     title: 'Fornecedores sem Débito no Período',
-    intro: 'Destaca Fornecedores e subcontas com saldo anterior, crédito e saldo atual positivos, mas sem débito no período, para revisar movimentações pendentes.',
+    intro: 'Mostra contas da família 2.1.03 quando S. Anterior, Crédito e S. Atual são maiores que zero e o Débito está zerado.',
     message:
       flaggedRows.length > 0
         ? 'Atenção: foram encontrados Fornecedores e/ou subitens com Débito zerado e S. Anterior, Crédito e S. Atual positivos.'
@@ -517,7 +520,7 @@ function buildAnalysis7(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis7',
     title: 'Validação Estoques x Fornecedores',
-    intro: 'Confere se o débito da conta Estoques não supera o crédito da conta Fornecedores, ajudando a validar coerência entre compras e obrigações.',
+    intro: 'Compara o Débito da conta 1.1.08 com o Crédito da conta 2.1.03 e alerta quando Estoques fica maior que Fornecedores.',
     message: hasMissingRows
       ? 'Atenção: não foi possível localizar a conta 1.1.08 e/ou a conta 2.1.03 para comparação.'
       : isAttention
@@ -539,7 +542,7 @@ function buildAnalysis8(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis8',
     title: 'Fornecedores com Saldo Residual',
-    intro: 'Mostra Fornecedores e subcontas com saldo atual credor residual, acima de zero e até 10,00, para revisão de pequenos saldos pendentes.',
+    intro: 'Mostra contas da família 2.1.03 quando o S. Atual estiver com natureza C, maior que 0 e menor ou igual a 10,00.',
     message:
       supplierRows.length > 0
         ? 'Atenção: foram encontrados Fornecedores e/ou subitens com S. Atual maior que 0 e menor ou igual a 10C.'
@@ -557,7 +560,7 @@ function buildAnalysis9(rows: LedgerLine[]): AnalysisReport {
   return {
     kind: 'analysis9',
     title: 'Fornecedores com Crédito sem Débito',
-    intro: 'Lista Fornecedores e subcontas com saldo anterior e crédito positivos, mas sem débito no período, para revisão de baixas não realizadas.',
+    intro: 'Mostra contas da família 2.1.03 quando S. Anterior e Crédito são maiores que zero e o Débito está zerado.',
     message:
       flaggedRows.length > 0
         ? 'Atenção: foram encontrados Fornecedores e/ou subitens com S. Anterior e Crédito maiores que zero e Débito zerado.'

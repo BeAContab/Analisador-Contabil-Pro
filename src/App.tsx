@@ -9,8 +9,16 @@ export function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState('');
+  const [processingIndex, setProcessingIndex] = useState(0);
+  const [processingFileName, setProcessingFileName] = useState('');
 
   const totalRows = useMemo(() => reports.reduce((sum, report) => sum + report.rows.length, 0), [reports]);
+  const totalUnclassified = useMemo(
+    () => reports.reduce((sum, report) => sum + report.unclassified.length, 0),
+    [reports]
+  );
+  const resultsSummary = useMemo(() => buildResultsSummary(reports), [reports]);
+  const processingPercent = files.length > 0 ? Math.round((processingIndex / files.length) * 100) : 0;
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     addFiles(Array.from(event.target.files ?? []));
@@ -22,7 +30,7 @@ export function App() {
     const invalidCount = selected.length - pdfs.length;
 
     if (invalidCount > 0) {
-      setMessage('Arquivo inválido. Envie apenas arquivos PDF.');
+      setMessage('Arquivo invalido. Envie apenas arquivos PDF.');
     } else {
       setMessage('');
     }
@@ -58,27 +66,35 @@ export function App() {
 
   async function processFiles() {
     if (files.length === 0) {
-      setMessage('Envie um ou mais arquivos PDF para iniciar a análise.');
+      setMessage('Envie um ou mais arquivos PDF para iniciar a analise.');
       return;
     }
 
     setIsProcessing(true);
     setMessage('');
     setReports([]);
+    setProcessingIndex(0);
+    setProcessingFileName('');
 
     const parsed: CompanyReport[] = [];
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
+      setProcessingIndex(index + 1);
+      setProcessingFileName(file.name);
       parsed.push(await parsePdfFile(file));
+      setReports([...parsed]);
     }
 
-    setReports(parsed);
     setIsProcessing(false);
+    setProcessingIndex(0);
+    setProcessingFileName('');
   }
 
   function clearAll() {
     setFiles([]);
     setReports([]);
     setMessage('');
+    setProcessingIndex(0);
+    setProcessingFileName('');
   }
 
   return (
@@ -88,8 +104,8 @@ export function App() {
           <p className="eyebrow">Processamento local no navegador</p>
           <h1>Analisador de Balancetes em PDF</h1>
           <p>
-            Envie balancetes analíticos em PDF para identificar saldos invertidos e contas sem movimento, com relatórios
-            separados por empresa.
+            Envie balancetes analiticos em PDF para identificar alertas, inconsistencias e contas sem
+            movimentacao, com relatorios separados por empresa.
           </p>
         </div>
       </section>
@@ -113,7 +129,13 @@ export function App() {
         {files.length > 0 && (
           <div className="fileList">
             <div className="fileListHeader">
-              <strong>{files.length} arquivo(s) selecionado(s)</strong>
+              <div>
+                <strong>{files.length} arquivo(s) selecionado(s)</strong>
+                <p className="fileListHint">Voce pode adicionar mais arquivos antes de processar ou remover apenas os que nao quiser analisar.</p>
+              </div>
+              <label htmlFor="pdf-upload" className="inlineAction">
+                Adicionar mais arquivos
+              </label>
             </div>
             {files.map((file) => (
               <div className="fileItem" key={`${file.name}-${file.size}-${file.lastModified}`}>
@@ -136,7 +158,18 @@ export function App() {
         </div>
       </section>
 
-      {isProcessing && <div className="loading">Extraindo texto dos PDFs e analisando as linhas contábeis...</div>}
+      {isProcessing && (
+        <div className="loading">
+          <strong>Processando arquivos...</strong>
+          <span>
+            {processingIndex} de {files.length} arquivo(s) concluido(s) ({processingPercent}%)
+          </span>
+          {processingFileName && <span>Arquivo atual: {processingFileName}</span>}
+          <div className="loadingBar" aria-hidden="true">
+            <div style={{ width: `${processingPercent}%` }} />
+          </div>
+        </div>
+      )}
 
       {reports.length > 0 && (
         <section className="results">
@@ -145,7 +178,14 @@ export function App() {
               <p className="eyebrow">Resultados</p>
               <h2>{reports.length} arquivo(s) processado(s)</h2>
             </div>
-            <span>{totalRows} linha(s) contábeis extraída(s)</span>
+            <span>{totalRows} linha(s) contabeis extraida(s)</span>
+          </div>
+
+          <div className="resultsSummary">
+            <SummaryCard label="Empresas com alertas" value={resultsSummary.companiesWithAlerts} tone="attention" />
+            <SummaryCard label="Relatorios com ocorrencia" value={resultsSummary.reportsWithOccurrences} tone="neutral" />
+            <SummaryCard label="Ocorrencias identificadas" value={resultsSummary.totalOccurrences} tone="neutral" />
+            <SummaryCard label="Linhas nao classificadas" value={totalUnclassified} tone={totalUnclassified > 0 ? 'attention' : 'ok'} />
           </div>
 
           {reports.map((report) => (
@@ -155,4 +195,60 @@ export function App() {
       )}
     </main>
   );
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: number;
+  tone: 'neutral' | 'attention' | 'ok';
+}) {
+  return (
+    <div className={`summaryCard ${tone}`}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function buildResultsSummary(reports: CompanyReport[]) {
+  let companiesWithAlerts = 0;
+  let reportsWithOccurrences = 0;
+  let totalOccurrences = 0;
+
+  reports.forEach((report) => {
+    const comparisonOccurrence = report.comparisonReport.isAttention ? 1 : 0;
+    const analysisOccurrences = report.analysisReports.map((analysis) => ({
+      reportCount: analysis.isAttention ? 1 : 0,
+      rowCount: analysis.rows.length > 0 ? analysis.rows.length : analysis.isAttention ? 1 : 0
+    }));
+
+    const reportCount =
+      (report.invertedRows.length > 0 ? 1 : 0) +
+      (report.zeroMovementRows.length > 0 ? 1 : 0) +
+      comparisonOccurrence +
+      analysisOccurrences.reduce((sum, item) => sum + item.reportCount, 0);
+
+    const occurrenceCount =
+      report.invertedRows.length +
+      report.zeroMovementRows.length +
+      comparisonOccurrence +
+      analysisOccurrences.reduce((sum, item) => sum + item.rowCount, 0);
+
+    if (reportCount > 0) {
+      companiesWithAlerts += 1;
+    }
+
+    reportsWithOccurrences += reportCount;
+    totalOccurrences += occurrenceCount;
+  });
+
+  return {
+    companiesWithAlerts,
+    reportsWithOccurrences,
+    totalOccurrences
+  };
 }

@@ -25,16 +25,25 @@ export function CompanyCard({ company }: CompanyCardProps) {
   const activeTitle = reportTitle(activeTab, company);
   const activeIntro = reportIntro(activeTab, company);
   const exportEnabled = hasExportContent(company);
+  const companySummary = useMemo(() => buildCompanySummary(company), [company]);
+  const activeReportMeta = useMemo(() => buildReportMeta(company, activeTab), [company, activeTab]);
 
   const activeWithCredit = company.invertedRows.filter((row) => row.alertType === 'Ativo com saldo C').length;
   const passiveWithDebit = company.invertedRows.filter((row) => row.alertType === 'Passivo/PL com saldo D').length;
 
   return (
-    <article className="companyCard">
+    <article className={`companyCard ${companySummary.hasAttention ? 'hasAttention' : 'isClean'}`}>
       <header className="companyHeader">
-        <div>
-          <p className="eyebrow">Empresa</p>
-          <h2>{company.companyName}</h2>
+        <div className="companyTitleBlock">
+          <div className="companyHeading">
+            <div>
+              <p className="eyebrow">Empresa</p>
+              <h2>{company.companyName}</h2>
+            </div>
+            <div className={`statusPill ${companySummary.hasAttention ? 'attention' : 'ok'}`}>
+              {companySummary.hasAttention ? 'Com alertas' : 'Sem ocorrencias relevantes'}
+            </div>
+          </div>
           <div className="metadataGrid">
             <span>Codigo: {company.companyCode ?? '-'}</span>
             <span>CNPJ: {company.cnpj}</span>
@@ -45,6 +54,12 @@ export function CompanyCard({ company }: CompanyCardProps) {
         </div>
       </header>
 
+      <div className="summaryGrid companySummaryGrid">
+        <Summary label="Relatorios com ocorrencia" value={companySummary.reportsWithOccurrences} />
+        <Summary label="Ocorrencias encontradas" value={companySummary.occurrences} />
+        <Summary label="Linhas nao classificadas" value={company.unclassified.length} tone={company.unclassified.length > 0 ? 'attention' : 'neutral'} />
+      </div>
+
       {company.errors.length > 0 && (
         <div className="warningBox">
           {company.errors.map((error) => (
@@ -53,17 +68,27 @@ export function CompanyCard({ company }: CompanyCardProps) {
         </div>
       )}
 
+      {company.unclassified.length > 0 && (
+        <div className="unclassifiedNotice">
+          <strong>Atencao para parsing:</strong> {company.unclassified.length} linha(s) nao classificada(s) merecem revisao.
+        </div>
+      )}
+
       <div className="tabs" role="tablist" aria-label="Relatorios">
-        {reportTabs.map((tab) => (
-          <button
-            key={tab.kind}
-            type="button"
-            className={activeTab === tab.kind ? 'active' : ''}
-            onClick={() => setActiveTab(tab.kind)}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {reportTabs.map((tab) => {
+          const meta = buildReportMeta(company, tab.kind);
+          return (
+            <button
+              key={tab.kind}
+              type="button"
+              className={`${activeTab === tab.kind ? 'active' : ''} ${meta.hasAttention ? 'tabAttention' : ''}`}
+              onClick={() => setActiveTab(tab.kind)}
+            >
+              <span>{tab.label}</span>
+              <span className={`tabBadge ${meta.hasAttention ? 'attention' : 'neutral'}`}>{meta.count}</span>
+            </button>
+          );
+        })}
       </div>
 
       <section className="reportPanel">
@@ -71,6 +96,14 @@ export function CompanyCard({ company }: CompanyCardProps) {
           <div>
             <p className="eyebrow">{activeTitle}</p>
             <p className="reportIntro">{activeIntro}</p>
+            <div className="reportStatusRow">
+              <span className={`statusPill small ${activeReportMeta.hasAttention ? 'attention' : 'ok'}`}>
+                {activeReportMeta.hasAttention ? 'Atencao' : 'Sem ocorrencias'}
+              </span>
+              <span className="reportStatusCount">
+                {activeReportMeta.count} {activeReportMeta.count === 1 ? 'ocorrencia' : 'ocorrencias'}
+              </span>
+            </div>
             {activeTab === 'inverted' ? (
               <div className="summaryGrid">
                 <Summary label="Ativo com saldo C" value={activeWithCredit} />
@@ -104,7 +137,7 @@ export function CompanyCard({ company }: CompanyCardProps) {
         ) : isAnalysisKind(activeTab) ? (
           <AnalysisPanel company={company} kind={activeTab} />
         ) : activeRows.length === 0 ? (
-          <div className="emptyState">Nenhum resultado encontrado para este relatorio.</div>
+          <div className="emptyState">{emptyStateMessage(activeTab)}</div>
         ) : (
           <DataTable rows={activeRows} kind={activeTab} />
         )}
@@ -149,7 +182,11 @@ function AnalysisPanel({ company, kind }: { company: CompanyReport; kind: Analys
         </div>
       )}
       {rows.length === 0 ? (
-        <div className="emptyState">Nenhum resultado encontrado para este relatorio.</div>
+        <div className="emptyState">
+          {analysisAttention(company, kind)
+            ? 'Nenhuma linha foi listada, mas o status acima indica que esta analise exige revisao.'
+            : 'Nenhuma ocorrencia encontrada nesta analise.'}
+        </div>
       ) : (
         <DataTable rows={rows} kind={kind} />
       )}
@@ -163,7 +200,7 @@ function ComparisonSummary({ company }: { company: CompanyReport }) {
     <div className="summaryGrid">
       <SummaryMoney label="Soma calculada" value={comparisonReport.baseValue} />
       <SummaryMoney label="Valor comparado" value={comparisonReport.targetValue} />
-      <SummaryMoney label="Diferenca" value={comparisonReport.difference} />
+      <SummaryMoney label="Diferenca" value={comparisonReport.difference} tone={comparisonReport.isAttention ? 'attention' : 'ok'} />
     </div>
   );
 }
@@ -254,18 +291,34 @@ function ComparisonAccount({
   );
 }
 
-function Summary({ label, value }: { label: string; value: number }) {
+function Summary({
+  label,
+  value,
+  tone = 'neutral'
+}: {
+  label: string;
+  value: number;
+  tone?: 'neutral' | 'attention' | 'ok';
+}) {
   return (
-    <div className="summaryItem">
+    <div className={`summaryItem ${tone}`}>
       <strong>{value}</strong>
       <span>{label}</span>
     </div>
   );
 }
 
-function SummaryMoney({ label, value }: { label: string; value: number }) {
+function SummaryMoney({
+  label,
+  value,
+  tone = 'neutral'
+}: {
+  label: string;
+  value: number;
+  tone?: 'neutral' | 'attention' | 'ok';
+}) {
   return (
-    <div className="summaryItem">
+    <div className={`summaryItem ${tone}`}>
       <strong>{formatNumberAsBrazilianMoney(value)}</strong>
       <span>{label}</span>
     </div>
@@ -281,33 +334,85 @@ function signedCurrentBalance(row?: CompanyReport['rows'][number]): number {
 function comparisonFormula(company: CompanyReport): string {
   const { comparisonReport } = company;
   if (comparisonReport.mode === 'fallback') {
-    return 'Soma calculada = Conta 3 + Conta 6. Comparacao = Soma calculada - Conta 2.4.13.';
+    return 'Caso 2: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) estiver zerada ou nao existir, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO) e 6 (RESULTADO E REGULARIZACAO) MENOS a conta 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS). Resumo: (3 + 6) - 2.4.13.';
   }
 
-  return 'Soma calculada = Conta 3 + Conta 6 + Conta 2.4.13. Comparacao = Soma calculada - Conta 1.1.04.019.';
+  return 'Caso 1: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) for maior que 0, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO), 6 (RESULTADO E REGULARIZACAO) e 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS) MENOS 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS). Resumo: (3 + 6 + 2.4.13) - 1.1.04.019.';
 }
 
 function buildCalculationRows(company: CompanyReport) {
   const { comparisonReport } = company;
   const rows = [
-    { label: 'Conta 3', value: signedCurrentBalance(comparisonReport.account3Row) },
-    { label: 'Conta 6', value: signedCurrentBalance(comparisonReport.account6Row) }
+    { label: comparisonLabel('Conta 3', comparisonReport.account3Row), value: signedCurrentBalance(comparisonReport.account3Row) },
+    { label: comparisonLabel('Conta 6', comparisonReport.account6Row), value: signedCurrentBalance(comparisonReport.account6Row) }
   ];
 
   if (comparisonReport.mode === 'distribution') {
-    rows.push({ label: 'Conta 2.4.13', value: signedCurrentBalance(comparisonReport.account2413Row) });
+    rows.push({
+      label: comparisonLabel('Conta 2.4.13', comparisonReport.account2413Row),
+      value: signedCurrentBalance(comparisonReport.account2413Row)
+    });
   }
 
   rows.push(
     { label: 'Soma calculada', value: comparisonReport.baseValue },
     {
-      label: comparisonReport.mode === 'fallback' ? 'Valor comparado: 2.4.13' : 'Valor comparado: 1.1.04.019',
+      label:
+        comparisonReport.mode === 'fallback'
+          ? comparisonLabel('Valor comparado: 2.4.13', comparisonReport.account2413Row)
+          : comparisonLabel('Valor comparado: 1.1.04.019', comparisonReport.distributionRow),
       value: comparisonReport.targetValue
     },
     { label: 'Diferenca', value: comparisonReport.difference }
   );
 
   return rows;
+}
+
+function comparisonLabel(prefix: string, row?: CompanyReport['rows'][number]) {
+  return row ? `${prefix} (${row.name})` : prefix;
+}
+
+function buildCompanySummary(company: CompanyReport) {
+  const reportCounts = reportTabs.map((tab) => buildReportMeta(company, tab.kind));
+  const reportsWithOccurrences = reportCounts.filter((report) => report.hasAttention).length;
+  const occurrences = reportCounts.reduce((sum, report) => sum + report.count, 0);
+
+  return {
+    hasAttention: reportsWithOccurrences > 0 || company.unclassified.length > 0 || company.errors.length > 0,
+    reportsWithOccurrences,
+    occurrences
+  };
+}
+
+function buildReportMeta(company: CompanyReport, kind: ReportKind) {
+  if (kind === 'inverted') {
+    return { count: company.invertedRows.length, hasAttention: company.invertedRows.length > 0 };
+  }
+  if (kind === 'zero') {
+    return { count: company.zeroMovementRows.length, hasAttention: company.zeroMovementRows.length > 0 };
+  }
+  if (kind === 'comparison') {
+    return { count: company.comparisonReport.isAttention ? 1 : 0, hasAttention: company.comparisonReport.isAttention };
+  }
+
+  const report = company.analysisReports.find((item) => item.kind === kind);
+  const count = report ? (report.rows.length > 0 ? report.rows.length : report.isAttention ? 1 : 0) : 0;
+
+  return {
+    count,
+    hasAttention: report?.isAttention ?? false
+  };
+}
+
+function emptyStateMessage(kind: ReportKind): string {
+  if (kind === 'inverted') {
+    return 'Nenhuma ocorrencia de saldo invertido foi encontrada neste arquivo.';
+  }
+  if (kind === 'zero') {
+    return 'Nenhuma conta sem movimentacao foi encontrada neste periodo.';
+  }
+  return 'Nenhuma ocorrencia encontrada neste relatorio.';
 }
 
 function isAnalysisKind(kind: ReportKind): kind is AnalysisKind {
