@@ -418,31 +418,34 @@ function buildAnalysis3(rows: LedgerLine[]): AnalysisReport {
   const clientRow = findAccountRow(rows, '1.1.02');
   const merchandiseRows = rows.filter((row) => row.code === '2652');
   const serviceRows = rows.filter((row) => row.code === '2700');
+  const productRows = rows.filter((row) => row.code === '2603');
   const merchandiseCredit = sumCredits(merchandiseRows);
   const serviceCredit = sumCredits(serviceRows);
-  const targetValue = merchandiseCredit + serviceCredit;
-  const hasMissingRows = !clientRow || merchandiseRows.length === 0 || serviceRows.length === 0;
+  const productCredit = sumCredits(productRows);
+  const targetValue = merchandiseCredit + serviceCredit + productCredit;
+  const hasMissingRows = !clientRow || merchandiseRows.length === 0 || serviceRows.length === 0 || productRows.length === 0;
   const isAttention = hasMissingRows || !numbersAreEqual(clientRow?.debitNumber, targetValue);
-  const calculationRows = [clientRow, ...merchandiseRows, ...serviceRows].filter(Boolean) as LedgerLine[];
+  const calculationRows = [clientRow, ...merchandiseRows, ...serviceRows, ...productRows].filter(Boolean) as LedgerLine[];
 
   return {
     kind: 'analysis3',
     title: 'Conciliação Clientes x Receitas Operacionais',
-    intro: 'Compara o Débito da conta 1.1.02 (Clientes) com a soma dos Créditos das linhas de Cod. R. 2652 e 2700.',
+    intro: 'Compara o Débito da conta 1.1.02 (Clientes) com a soma dos Créditos das linhas de Cod. R. 2652, 2700 e 2603.',
     message: hasMissingRows
-      ? 'Atenção: não foi possível localizar a conta 1.1.02 e/ou as linhas de Cod. R. 2652 e 2700 para comparação.'
+      ? 'Atenção: não foi possível localizar a conta 1.1.02 e/ou as linhas de Cod. R. 2652, 2700 e 2603 para comparação.'
       : isAttention
-        ? 'Atenção: o Débito da conta 1.1.02 difere da soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652) e Prestação de Serviços (Cod. R. 2700).'
-        : 'Tudo OK: o Débito da conta 1.1.02 está igual à soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652) e Prestação de Serviços (Cod. R. 2700).',
+        ? 'Atenção: o Débito da conta 1.1.02 difere da soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652), Prestação de Serviços (Cod. R. 2700) e Vendas de Produtos (Cod. R. 2603).'
+        : 'Tudo OK: o Débito da conta 1.1.02 está igual à soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652), Prestação de Serviços (Cod. R. 2700) e Vendas de Produtos (Cod. R. 2603).',
     rows: isAttention ? calculationRows : [],
     isAttention,
     calculation: {
       formula:
-        'Débito da conta 1.1.02 (Clientes) deve ser igual ao Crédito das linhas Cod. R. 2652 (Vendas de Mercadorias) mais Cod. R. 2700 (Prestação de Serviços).',
+        'Débito da conta 1.1.02 (Clientes) deve ser igual ao Crédito das linhas Cod. R. 2652 (Vendas de Mercadorias) mais Cod. R. 2700 (Prestação de Serviços) mais Cod. R. 2603 (Vendas de Produtos).',
       items: [
         { label: 'Débito de 1.1.02 (CLIENTES)', value: clientRow?.debitNumber ?? 0 },
         { label: 'Crédito Cod. R. 2652 (VENDAS DE MERCADORIAS)', value: merchandiseCredit },
         { label: 'Crédito Cod. R. 2700 (PRESTAÇÃO DE SERVIÇOS)', value: serviceCredit },
+        { label: 'Crédito Cod. R. 2603 (VENDAS DE PRODUTOS)', value: productCredit },
         { label: 'Soma das receitas', value: targetValue },
         { label: 'Diferença', value: (clientRow?.debitNumber ?? 0) - targetValue }
       ]
