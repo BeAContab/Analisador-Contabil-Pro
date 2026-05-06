@@ -424,19 +424,24 @@ function buildAnalysis3(rows: LedgerLine[]): AnalysisReport {
   const productCredit = sumCredits(productRows);
   const targetValue = merchandiseCredit + serviceCredit + productCredit;
   const hasMissingRows = !clientRow || merchandiseRows.length === 0 || serviceRows.length === 0 || productRows.length === 0;
-  const isAttention = hasMissingRows || !numbersAreEqual(clientRow?.debitNumber, targetValue);
-  const calculationRows = [clientRow, ...merchandiseRows, ...serviceRows, ...productRows].filter(Boolean) as LedgerLine[];
+  const difference = (clientRow?.debitNumber ?? 0) - targetValue;
+  const isBalanced = numbersAreEqual(clientRow?.debitNumber, targetValue);
+  const isAttention = !isBalanced;
+  const calculationRows =
+    !isBalanced
+      ? ([clientRow, ...merchandiseRows, ...serviceRows, ...productRows].filter(Boolean) as LedgerLine[])
+      : [];
 
   return {
     kind: 'analysis3',
     title: 'Conciliação Clientes x Receitas Operacionais',
     intro: 'Compara o Débito da conta 1.1.02 (Clientes) com a soma dos Créditos das linhas de Cod. R. 2652, 2700 e 2603.',
-    message: hasMissingRows
+    message: isBalanced
+      ? 'Tudo OK: o Débito da conta 1.1.02 está igual à soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652), Prestação de Serviços (Cod. R. 2700) e Vendas de Produtos (Cod. R. 2603).'
+      : hasMissingRows
       ? 'Atenção: não foi possível localizar a conta 1.1.02 e/ou as linhas de Cod. R. 2652, 2700 e 2603 para comparação.'
-      : isAttention
-        ? 'Atenção: o Débito da conta 1.1.02 difere da soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652), Prestação de Serviços (Cod. R. 2700) e Vendas de Produtos (Cod. R. 2603).'
-        : 'Tudo OK: o Débito da conta 1.1.02 está igual à soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652), Prestação de Serviços (Cod. R. 2700) e Vendas de Produtos (Cod. R. 2603).',
-    rows: isAttention ? calculationRows : [],
+      : 'Atenção: o Débito da conta 1.1.02 difere da soma dos Créditos de Vendas de Mercadorias (Cod. R. 2652), Prestação de Serviços (Cod. R. 2700) e Vendas de Produtos (Cod. R. 2603).',
+    rows: calculationRows,
     isAttention,
     calculation: {
       formula:
@@ -447,7 +452,7 @@ function buildAnalysis3(rows: LedgerLine[]): AnalysisReport {
         { label: 'Crédito Cod. R. 2700 (PRESTAÇÃO DE SERVIÇOS)', value: serviceCredit },
         { label: 'Crédito Cod. R. 2603 (VENDAS DE PRODUTOS)', value: productCredit },
         { label: 'Soma das receitas', value: targetValue },
-        { label: 'Diferença', value: (clientRow?.debitNumber ?? 0) - targetValue }
+        { label: 'Diferença', value: difference }
       ]
     }
   };
@@ -517,19 +522,22 @@ function buildAnalysis6(rows: LedgerLine[]): AnalysisReport {
 function buildAnalysis7(rows: LedgerLine[]): AnalysisReport {
   const stockRow = findAccountRow(rows, '1.1.08');
   const supplierRow = findAccountRow(rows, '2.1.03');
-  const hasMissingRows = !stockRow || !supplierRow;
-  const isAttention = hasMissingRows || stockRow.debitNumber > supplierRow.creditNumber;
+  const missingSupplier = !supplierRow;
+  const missingStock = !stockRow;
+  const isAttention = missingSupplier || (!missingStock && stockRow.debitNumber > supplierRow.creditNumber);
 
   return {
     kind: 'analysis7',
     title: 'Validação Estoques x Fornecedores',
     intro: 'Compara o Débito da conta 1.1.08 com o Crédito da conta 2.1.03 e alerta quando Estoques fica maior que Fornecedores.',
-    message: hasMissingRows
-      ? 'Atenção: não foi possível localizar a conta 1.1.08 e/ou a conta 2.1.03 para comparação.'
+    message: missingSupplier
+      ? 'Atenção: não foi possível localizar a conta 2.1.03 para comparação.'
+      : missingStock
+        ? 'Tudo OK: a conta 1.1.08 não foi localizada, então este relatório pode permanecer oculto.'
       : isAttention
         ? 'Atenção: o Débito da conta 1.1.08 está maior que o Crédito da conta 2.1.03.'
         : 'Tudo OK: o Débito da conta 1.1.08 não está maior que o Crédito da conta 2.1.03.',
-    rows: isAttention ? [stockRow, supplierRow].filter(Boolean) as LedgerLine[] : [],
+    rows: !missingStock && isAttention ? [stockRow, supplierRow].filter(Boolean) as LedgerLine[] : [],
     isAttention
   };
 }
