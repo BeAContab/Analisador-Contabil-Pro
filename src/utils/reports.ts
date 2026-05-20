@@ -1,6 +1,3 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { AnalysisCalculation, AnalysisKind, CompanyReport, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
 import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, nowLabel, parseBrazilianMoney, slugify } from './format';
 
@@ -117,7 +114,8 @@ export function hasExportContent(company: CompanyReport): boolean {
   return reportTabs.some((tab) => reportHasOccurrence(company, tab.kind));
 }
 
-export function downloadXlsx(company: CompanyReport) {
+export async function downloadXlsx(company: CompanyReport) {
+  const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
   const createdAt = nowLabel();
 
@@ -125,6 +123,7 @@ export function downloadXlsx(company: CompanyReport) {
     XLSX.utils.book_append_sheet(
       workbook,
       buildWorksheet(
+        XLSX.utils.aoa_to_sheet,
         company,
         reportTitle('inverted'),
         balanceColumns,
@@ -140,6 +139,7 @@ export function downloadXlsx(company: CompanyReport) {
     XLSX.utils.book_append_sheet(
       workbook,
       buildWorksheet(
+        XLSX.utils.aoa_to_sheet,
         company,
         reportTitle('zero'),
         balanceColumns,
@@ -155,6 +155,7 @@ export function downloadXlsx(company: CompanyReport) {
     XLSX.utils.book_append_sheet(
       workbook,
       buildWorksheet(
+        XLSX.utils.aoa_to_sheet,
         company,
         reportTitle('comparison'),
         comparisonColumns,
@@ -172,6 +173,7 @@ export function downloadXlsx(company: CompanyReport) {
     XLSX.utils.book_append_sheet(
       workbook,
       buildWorksheet(
+        XLSX.utils.aoa_to_sheet,
         company,
         reportTitle(kind, company),
         balanceColumns,
@@ -188,7 +190,11 @@ export function downloadXlsx(company: CompanyReport) {
   XLSX.writeFile(workbook, reportFileName(company, 'xlsx'));
 }
 
-export function downloadPdf(company: CompanyReport) {
+export async function downloadPdf(company: CompanyReport) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const createdAt = nowLabel();
 
@@ -206,6 +212,7 @@ export function downloadPdf(company: CompanyReport) {
   if (reportHasOccurrence(company, 'inverted')) {
     nextY = addPdfSection(
       doc,
+      autoTable,
       reportTitle('inverted'),
       balanceColumns,
       balanceBody(company.invertedRows),
@@ -217,6 +224,7 @@ export function downloadPdf(company: CompanyReport) {
   if (reportHasOccurrence(company, 'zero')) {
     nextY = addPdfSection(
       doc,
+      autoTable,
       reportTitle('zero'),
       balanceColumns,
       balanceBody(company.zeroMovementRows),
@@ -228,6 +236,7 @@ export function downloadPdf(company: CompanyReport) {
   if (reportHasOccurrence(company, 'comparison')) {
     nextY = addPdfSection(
       doc,
+      autoTable,
       reportTitle('comparison'),
       comparisonColumns,
       comparisonBody(company),
@@ -241,6 +250,7 @@ export function downloadPdf(company: CompanyReport) {
     if (!reportHasOccurrence(company, kind)) return;
     nextY = addPdfSection(
       doc,
+      autoTable,
       reportTitle(kind, company),
       balanceColumns,
       balanceBody(reportRows(company, kind)),
@@ -255,6 +265,7 @@ export function downloadPdf(company: CompanyReport) {
 }
 
 function buildWorksheet(
+  aoaToSheet: (rows: unknown[][]) => ReturnType<(typeof import('xlsx'))['utils']['aoa_to_sheet']>,
   company: CompanyReport,
   title: string,
   columns: string[],
@@ -263,7 +274,7 @@ function buildWorksheet(
   message?: string,
   intro?: string,
   calculation?: AnalysisCalculation
-) {
+): ReturnType<(typeof import('xlsx'))['utils']['aoa_to_sheet']> {
   const rows = [
     ['Relatorio', title],
     ['Empresa', company.companyName],
@@ -281,7 +292,7 @@ function buildWorksheet(
     columns,
     ...(body.length ? body : [['Nenhum resultado encontrado.']])
   ];
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const worksheet = aoaToSheet(rows as unknown[][]);
   worksheet['!cols'] = [
     { wch: 26 },
     { wch: 18 },
@@ -295,8 +306,11 @@ function buildWorksheet(
   return worksheet;
 }
 
+type JsPdfInstance = InstanceType<typeof import('jspdf').default>;
+
 function addPdfSection(
-  doc: jsPDF,
+  doc: JsPdfInstance,
+  autoTable: (doc: JsPdfInstance, options: object) => void,
   title: string,
   columns: string[],
   body: Array<Array<string | number>>,
@@ -470,6 +484,6 @@ function comparisonFormula(company: CompanyReport): string {
   return 'Caso 1: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) for maior que 0, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO), 6 (RESULTADO E REGULARIZACAO) e 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS) MENOS 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS). Resumo: (3 + 6 + 2.4.13) - 1.1.04.019.';
 }
 
-function getFinalY(doc: jsPDF) {
-  return (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 150;
+function getFinalY(doc: JsPdfInstance) {
+  return (doc as JsPdfInstance & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 150;
 }

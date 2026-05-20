@@ -9,8 +9,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
-          pdf: ['pdfjs-dist'],
-          reports: ['xlsx', 'jspdf', 'jspdf-autotable']
+          pdf: ['pdfjs-dist']
         }
       }
     }
