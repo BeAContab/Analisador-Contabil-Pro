@@ -24,14 +24,17 @@ interface CompanyCardProps {
 export function CompanyCard({ company }: CompanyCardProps) {
   const [activeTab, setActiveTab] = useState<ReportKind>('inverted');
   const [showHiddenReports, setShowHiddenReports] = useState(false);
+  
   const visibleTabs = useMemo(() => reportTabs.filter((tab) => reportHasOccurrence(company, tab.kind)), [company]);
   const displayedTabs = showHiddenReports ? reportTabs : visibleTabs;
   const hiddenReportsCount = reportTabs.length - visibleTabs.length;
   const effectiveTab = displayedTabs.find((tab) => tab.kind === activeTab)?.kind ?? displayedTabs[0]?.kind;
+  
   const activeRows = useMemo(() => (effectiveTab ? reportRows(company, effectiveTab) : []), [company, effectiveTab]);
-  const activeTitle = effectiveTab ? reportTitle(effectiveTab, company) : 'Relatorios ocultos';
-  const activeIntro = effectiveTab ? reportIntro(effectiveTab, company) : 'Nenhum relatorio com ocorrencia esta visivel no momento.';
+  const activeTitle = effectiveTab ? reportTitle(effectiveTab, company) : 'Relatórios Ocultos';
+  const activeIntro = effectiveTab ? reportIntro(effectiveTab, company) : 'Nenhum relatório com ocorrência está visível no momento.';
   const exportEnabled = hasExportContent(company);
+  
   const companySummary = useMemo(() => buildCompanySummary(company), [company]);
   const activeReportMeta = useMemo(
     () => (effectiveTab ? buildReportMeta(company, effectiveTab) : { count: 0, hasAttention: false }),
@@ -44,311 +47,250 @@ export function CompanyCard({ company }: CompanyCardProps) {
     }
   }, [activeTab, effectiveTab]);
 
-  const activeWithCredit = company.invertedRows.filter((row) => row.alertType === 'Ativo com saldo C').length;
-  const passiveWithDebit = company.invertedRows.filter((row) => row.alertType === 'Passivo/PL com saldo D').length;
-
   return (
-    <article className={`companyCard ${companySummary.hasAttention ? 'hasAttention' : 'isClean'}`}>
-      <header className="companyHeader">
-        <div className="companyTitleBlock">
-          <div className="companyHeading">
-            <div>
-              <p className="eyebrow">Empresa</p>
-              <h2>{company.companyName}</h2>
-            </div>
-            <div className={`statusPill ${companySummary.hasAttention ? 'attention' : 'ok'}`}>
-              {companySummary.hasAttention ? 'Com alertas' : 'Sem ocorrencias relevantes'}
-            </div>
-          </div>
-          <div className="metadataGrid">
-            <span>Codigo: {company.companyCode ?? '-'}</span>
-            <span>CNPJ: {company.cnpj}</span>
-            <span>Periodo: {company.period}</span>
-            <span>Arquivo: {company.fileName}</span>
-            <span>Total de linhas contabeis: {company.rows.length}</span>
-          </div>
-        </div>
-      </header>
+    <article className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col gap-lg p-lg">
+      {/* Header da Empresa */}
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md border-b border-outline-variant pb-lg">
+        <MetaItem label="Empresa" value={company.companyName} bold />
+        <MetaItem label="CNPJ" value={company.cnpj} tabular />
+        <MetaItem label="Período" value={company.period} />
+        <MetaItem label="Linhas Extraídas" value={`${company.rows.length} registros`} tabular />
+      </section>
 
-      <div className="summaryGrid companySummaryGrid">
-        <Summary label="Relatorios com ocorrencia" value={companySummary.reportsWithOccurrences} />
-        <Summary label="Ocorrencias encontradas" value={companySummary.occurrences} />
-        <Summary label="Linhas nao classificadas" value={company.unclassified.length} tone={company.unclassified.length > 0 ? 'attention' : 'neutral'} />
-      </div>
-
-      {company.errors.length > 0 && (
-        <div className="warningBox">
-          {company.errors.map((error) => (
-            <p key={error}>{error}</p>
+      {/* Alertas e Erros */}
+      {(company.errors.length > 0 || company.unclassified.length > 0) && (
+        <section className="space-y-sm">
+          {company.errors.map((error, i) => (
+            <div key={i} className="bg-error-container text-on-error-container p-md rounded-lg flex items-center gap-md">
+              <span className="material-symbols-outlined">error</span>
+              <span className="text-body-sm font-medium">{error}</span>
+            </div>
           ))}
-        </div>
-      )}
-
-      {company.unclassified.length > 0 && (
-        <div className="unclassifiedNotice">
-          <strong>Atencao para parsing:</strong> {company.unclassified.length} linha(s) nao classificada(s) merecem revisao.
-        </div>
-      )}
-
-      <div className="tabsHeader">
-        {hiddenReportsCount > 0 && (
-          <button type="button" className="toggleHiddenButton" onClick={() => setShowHiddenReports((current) => !current)}>
-            {showHiddenReports
-              ? `Ocultar relatorios sem ocorrencia (${hiddenReportsCount})`
-              : `Mostrar relatorios ocultos (${hiddenReportsCount})`}
-          </button>
-        )}
-      </div>
-
-      <div className="tabs" role="tablist" aria-label="Relatorios">
-        {displayedTabs.map((tab) => {
-          const meta = buildReportMeta(company, tab.kind);
-          return (
-            <button
-              key={tab.kind}
-              type="button"
-              className={`${activeTab === tab.kind ? 'active' : ''} ${meta.hasAttention ? 'tabAttention' : ''}`}
-              onClick={() => setActiveTab(tab.kind)}
-            >
-              <span>{tab.label}</span>
-              <span className={`tabBadge ${meta.hasAttention ? 'attention' : 'neutral'}`}>{meta.count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <section className="reportPanel">
-        <div className="reportHeader">
-          <div>
-            <p className="eyebrow">{activeTitle}</p>
-            <p className="reportIntro">{activeIntro}</p>
-            <div className="reportStatusRow">
-              <span className={`statusPill small ${activeReportMeta.hasAttention ? 'attention' : 'ok'}`}>
-                {activeReportMeta.hasAttention ? 'Atencao' : 'Sem ocorrencias'}
-              </span>
-              <span className="reportStatusCount">
-                {activeReportMeta.count} {activeReportMeta.count === 1 ? 'ocorrencia' : 'ocorrencias'}
-              </span>
+          {company.unclassified.length > 0 && (
+            <div className="bg-surface-container-high text-on-surface-variant p-md rounded-lg flex items-center gap-md border border-outline-variant">
+              <span className="material-symbols-outlined">help_outline</span>
+              <span className="text-body-sm">Atenção: {company.unclassified.length} linha(s) não foram classificadas automaticamente.</span>
             </div>
-            {effectiveTab === 'inverted' ? (
-              <div className="summaryGrid">
-                <Summary label="Ativo com saldo C" value={activeWithCredit} />
-                <Summary label="Passivo/PL com saldo D" value={passiveWithDebit} />
-                <Summary label="Total" value={company.invertedRows.length} />
-              </div>
-            ) : effectiveTab === 'zero' ? (
-              <div className="summaryGrid single">
-                <Summary label="Total de contas encontradas" value={company.zeroMovementRows.length} />
-              </div>
-            ) : effectiveTab === 'comparison' ? (
-              <ComparisonSummary company={company} />
-            ) : (
-              <div className="summaryGrid single">
-                <Summary label="Total de linhas no relatorio" value={activeRows.length} />
-              </div>
-            )}
-          </div>
-          <div className="actions">
-            <button type="button" onClick={() => downloadXlsx(company)} disabled={!exportEnabled}>
-              Baixar XLSX consolidado
-            </button>
-            <button type="button" onClick={() => downloadPdf(company)} disabled={!exportEnabled}>
-              Baixar PDF consolidado
-            </button>
-          </div>
+          )}
+        </section>
+      )}
+
+      {/* Navegação de Abas e Ações */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-md border-b border-outline-variant">
+        <nav className="flex gap-md overflow-x-auto">
+          {displayedTabs.map((tab) => {
+            const meta = buildReportMeta(company, tab.kind);
+            const isActive = activeTab === tab.kind;
+            return (
+              <button
+                key={tab.kind}
+                onClick={() => setActiveTab(tab.kind)}
+                className={`px-md py-sm font-title-sm flex items-center gap-sm transition-all border-b-2 whitespace-nowrap ${
+                  isActive 
+                    ? 'text-primary border-primary' 
+                    : 'text-secondary border-transparent hover:text-primary hover:border-outline-variant'
+                }`}
+              >
+                {tab.label}
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                  meta.hasAttention ? 'bg-error text-on-error' : 'bg-surface-container-highest text-secondary'
+                }`}>
+                  {meta.count}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+        
+        <div className="flex gap-sm pb-sm">
+          <button 
+            disabled={!exportEnabled}
+            onClick={() => downloadXlsx(company)}
+            className="flex items-center gap-xs px-md py-sm bg-surface-container-highest text-primary border border-outline-variant rounded text-label-caps font-label-caps hover:bg-outline-variant transition-colors disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-[18px]">description</span>
+            XLSX
+          </button>
+          <button 
+            disabled={!exportEnabled}
+            onClick={() => downloadPdf(company)}
+            className="flex items-center gap-xs px-md py-sm bg-primary text-on-primary rounded text-label-caps font-label-caps hover:opacity-90 transition-all disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+            PDF
+          </button>
+        </div>
+      </div>
+
+      {/* Conteúdo do Relatório Ativo */}
+      <section className="space-y-lg">
+        <div className="flex flex-col gap-sm">
+          <h3 className="text-headline-md text-primary">{activeTitle}</h3>
+          <p className="text-body-md text-secondary leading-relaxed">{activeIntro}</p>
         </div>
 
-        {!effectiveTab ? (
-          <div className="emptyState">Nenhum relatorio com ocorrencia esta visivel. Use o botao acima para mostrar os relatorios ocultos.</div>
-        ) : effectiveTab === 'comparison' ? (
+        {effectiveTab === 'comparison' ? (
           <ComparisonPanel company={company} />
         ) : isAnalysisKind(effectiveTab) ? (
           <AnalysisPanel company={company} kind={effectiveTab} />
-        ) : activeRows.length === 0 ? (
-          <div className="emptyState">{emptyStateMessage(effectiveTab)}</div>
         ) : (
-          <DataTable rows={activeRows} kind={effectiveTab} />
+          <DataTable rows={activeRows} kind={effectiveTab!} />
         )}
 
-        {company.unclassified.length > 0 && (
-          <details className="debugDetails">
-            <summary>{company.unclassified.length} linha(s) nao classificada(s) para depuracao</summary>
-            <ul>
-              {company.unclassified.slice(0, 20).map((line, index) => (
-                <li key={`${line.page}-${index}`}>
-                  Pagina {line.page}: {line.text}
-                </li>
-              ))}
-            </ul>
-          </details>
+        {hiddenReportsCount > 0 && (
+          <button 
+            onClick={() => setShowHiddenReports(!showHiddenReports)}
+            className="w-full py-md border border-dashed border-outline-variant rounded-lg text-secondary font-body-sm hover:bg-surface-container-low transition-colors"
+          >
+            {showHiddenReports 
+              ? `Ocultar relatórios sem ocorrência` 
+              : `Mostrar mais ${hiddenReportsCount} relatório(s) oculto(s)`}
+          </button>
         )}
       </section>
     </article>
   );
 }
 
+function MetaItem({ label, value, bold = false, tabular = false }: { label: string; value: string; bold?: boolean; tabular?: boolean }) {
+  return (
+    <div className="bg-surface-container-low p-md rounded-lg border border-outline-variant/30">
+      <span className="text-label-caps font-label-caps text-secondary mb-xs block uppercase">{label}</span>
+      <p className={`text-body-md ${bold ? 'font-bold text-primary' : 'text-on-surface'} ${tabular ? 'tabular-nums font-medium' : ''}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function AnalysisPanel({ company, kind }: { company: CompanyReport; kind: AnalysisKind }) {
   const rows = reportRows(company, kind);
-  const statusClass = analysisAttention(company, kind) ? 'attention' : 'ok';
+  const isAttention = analysisAttention(company, kind);
   const calculation = analysisCalculation(company, kind);
 
   return (
-    <div className="comparisonPanel">
-      <div className={`statusBox ${statusClass}`}>{analysisMessage(company, kind)}</div>
+    <div className="space-y-lg">
+      <div className={`p-lg rounded-xl border flex gap-md items-start ${
+        isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-secondary-container/10 border-secondary-container/20 text-on-secondary-container'
+      }`}>
+        <span className="material-symbols-outlined mt-0.5">{isAttention ? 'warning' : 'info'}</span>
+        <div>
+          <h4 className="font-bold mb-1">{isAttention ? 'Atenção Necessária' : 'Análise Concluída'}</h4>
+          <p className="text-body-sm opacity-90">{analysisMessage(company, kind)}</p>
+        </div>
+      </div>
+
       {calculation && (
-        <div className="calculationBox">
-          <h3>Calculo</h3>
-          <p>{calculation.formula}</p>
-          <div className="calculationTable">
+        <div className="bg-surface-container-low p-lg rounded-xl border border-outline-variant space-y-md">
+          <div className="flex items-center gap-sm text-primary">
+            <span className="material-symbols-outlined text-[20px]">calculate</span>
+            <h4 className="font-title-sm">Cálculo de Verificação</h4>
+          </div>
+          <p className="text-body-sm font-medium text-secondary italic">"{calculation.formula}"</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
             {calculation.items.map((item) => (
-              <div key={item.label}>
-                <span>{item.label}</span>
-                <strong>{formatNumberAsBrazilianMoney(item.value)}</strong>
+              <div key={item.label} className="bg-surface-container-lowest p-md rounded-lg border border-outline-variant/50">
+                <span className="text-label-caps text-secondary block mb-1">{item.label}</span>
+                <span className="text-body-md font-bold text-primary tabular-nums">{formatNumberAsBrazilianMoney(item.value)}</span>
               </div>
             ))}
           </div>
         </div>
       )}
-      {rows.length === 0 ? (
-        <div className="emptyState">
-          {analysisAttention(company, kind)
-            ? 'Nenhuma linha foi listada, mas o status acima indica que esta analise exige revisao.'
-            : 'Nenhuma ocorrencia encontrada nesta analise.'}
-        </div>
-      ) : (
-        <DataTable rows={rows} kind={kind} />
-      )}
-    </div>
-  );
-}
 
-function ComparisonSummary({ company }: { company: CompanyReport }) {
-  const { comparisonReport } = company;
-  return (
-    <div className="summaryGrid">
-      <SummaryMoney label="Soma calculada" value={comparisonReport.baseValue} />
-      <SummaryMoney label="Valor comparado" value={comparisonReport.targetValue} />
-      <SummaryMoney label="Diferenca" value={comparisonReport.difference} tone={comparisonReport.isAttention ? 'attention' : 'ok'} />
+      {rows.length > 0 ? (
+        <DataTable rows={rows} kind={kind} />
+      ) : (
+        <div className="p-xl text-center border-2 border-dashed border-outline-variant rounded-xl text-secondary italic bg-surface-bright">
+          Nenhuma ocorrência detalhada para listar nesta seção.
+        </div>
+      )}
     </div>
   );
 }
 
 function ComparisonPanel({ company }: { company: CompanyReport }) {
   const { comparisonReport } = company;
-  const statusClass = comparisonReport.isAttention ? 'attention' : 'ok';
+  const isAttention = comparisonReport.isAttention;
   const calculationRows = buildCalculationRows(company);
-  const targetTitle =
-    comparisonReport.mode === 'fallback'
-      ? 'Conta comparada: 2.4.13'
-      : 'Conta comparada: 1.1.04.019';
 
   return (
-    <div className="comparisonPanel">
-      <div className={`statusBox ${statusClass}`}>{comparisonReport.message}</div>
-      <div className="calculationBox">
-        <h3>Calculo</h3>
-        <p>{comparisonFormula(company)}</p>
-        <div className="calculationTable">
-          {calculationRows.map((row) => (
-            <div key={row.label}>
-              <span>{row.label}</span>
-              <strong>{formatNumberAsBrazilianMoney(row.value)}</strong>
-            </div>
-          ))}
+    <div className="space-y-lg">
+       <div className={`p-lg rounded-xl border flex gap-md items-start ${
+        isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-secondary-container/10 border-secondary-container/20 text-on-secondary-container'
+      }`}>
+        <span className="material-symbols-outlined mt-0.5">{isAttention ? 'warning' : 'check_circle'}</span>
+        <div>
+          <h4 className="font-bold mb-1">{isAttention ? 'Divergência Detectada' : 'Saldos Reconciliados'}</h4>
+          <p className="text-body-sm opacity-90">{comparisonReport.message}</p>
         </div>
       </div>
-      <div className="comparisonGrid">
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+        {/* Bloco de Cálculo */}
+        <div className="lg:col-span-2 bg-surface-container-low p-lg rounded-xl border border-outline-variant space-y-md">
+          <div className="flex items-center gap-sm text-primary">
+            <span className="material-symbols-outlined text-[20px]">calculate</span>
+            <h4 className="font-title-sm">Fórmula de Conciliação</h4>
+          </div>
+          <p className="text-body-sm text-secondary italic">"{comparisonFormula(company)}"</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-sm">
+            {calculationRows.map((row) => (
+              <div key={row.label} className="flex justify-between items-center p-md bg-surface-container-lowest rounded-lg border border-outline-variant/30">
+                <span className="text-body-sm text-on-surface-variant truncate mr-4">{row.label}</span>
+                <span className="text-body-sm font-bold tabular-nums whitespace-nowrap">{formatNumberAsBrazilianMoney(row.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Score de Conformidade Visual */}
+        <div className="bg-primary-container text-on-primary-container p-lg rounded-xl flex flex-col items-center justify-center text-center shadow-sm border border-primary/20">
+          <div className="w-16 h-16 rounded-full bg-surface-container-lowest/20 flex items-center justify-center mb-md">
+            <span className="material-symbols-outlined !text-[32px]">{isAttention ? 'analytics' : 'verified'}</span>
+          </div>
+          <h4 className="text-title-sm font-title-sm">Score de Precisão</h4>
+          <p className="text-display-lg font-display-lg mt-xs">{isAttention ? 'Divergente' : '100%'}</p>
+          <p className="text-body-sm opacity-80 mt-xs">
+            {isAttention ? 'Verifique os lançamentos manuais.' : 'Dados consistentes com o balancete.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
         <ComparisonAccount title="Conta 3" row={comparisonReport.account3Row} value={signedCurrentBalance(comparisonReport.account3Row)} />
         <ComparisonAccount title="Conta 6" row={comparisonReport.account6Row} value={signedCurrentBalance(comparisonReport.account6Row)} />
         {comparisonReport.mode === 'distribution' && (
-          <ComparisonAccount
-            title="Conta 2.4.13"
-            row={comparisonReport.account2413Row}
-            value={signedCurrentBalance(comparisonReport.account2413Row)}
-          />
+          <ComparisonAccount title="Conta 2.4.13" row={comparisonReport.account2413Row} value={signedCurrentBalance(comparisonReport.account2413Row)} />
         )}
-        <ComparisonAccount
-          title={targetTitle}
-          row={comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow}
-          value={comparisonReport.targetValue}
+        <ComparisonAccount 
+          title={comparisonReport.mode === 'fallback' ? 'Conta 2.4.13' : 'Conta 1.1.04.019'} 
+          row={comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow} 
+          value={comparisonReport.targetValue} 
         />
       </div>
     </div>
   );
 }
 
-function ComparisonAccount({
-  title,
-  row,
-  value
-}: {
-  title: string;
-  row?: CompanyReport['rows'][number];
-  value: number;
-}) {
+function ComparisonAccount({ title, row, value }: { title: string; row?: CompanyReport['rows'][number]; value: number }) {
   return (
-    <div className="comparisonAccount">
-      <h3>{title}</h3>
+    <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
+      <h5 className="text-label-caps font-label-caps text-secondary mb-md border-b border-outline-variant pb-2">{title}</h5>
       {row ? (
-        <dl>
-          <div>
-            <dt>Natureza</dt>
-            <dd>{classifyAccount(row.account) || '-'}</dd>
+        <div className="space-y-xs">
+          <p className="text-body-sm font-bold text-primary truncate" title={row.name}>{row.name}</p>
+          <p className="text-[12px] font-mono text-secondary mb-3">{row.account}</p>
+          <div className="flex justify-between items-end mt-4">
+             <span className="text-[11px] text-on-surface-variant font-medium">Analisado</span>
+             <span className="text-body-sm font-bold tabular-nums">{formatNumberAsBrazilianMoney(value)}</span>
           </div>
-          <div>
-            <dt>Conta Contabil</dt>
-            <dd>{row.account}</dd>
-          </div>
-          <div>
-            <dt>Nome da Conta</dt>
-            <dd>{row.name}</dd>
-          </div>
-          <div>
-            <dt>S. Atual</dt>
-            <dd>{row.currentBalance}</dd>
-          </div>
-          <div>
-            <dt>Valor analisado</dt>
-            <dd>{formatNumberAsBrazilianMoney(value)}</dd>
-          </div>
-        </dl>
+        </div>
       ) : (
-        <p>Conta nao localizada no PDF.</p>
+        <div className="py-md text-center">
+          <span className="text-body-sm text-secondary italic">Não localizada</span>
+        </div>
       )}
-    </div>
-  );
-}
-
-function Summary({
-  label,
-  value,
-  tone = 'neutral'
-}: {
-  label: string;
-  value: number;
-  tone?: 'neutral' | 'attention' | 'ok';
-}) {
-  return (
-    <div className={`summaryItem ${tone}`}>
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function SummaryMoney({
-  label,
-  value,
-  tone = 'neutral'
-}: {
-  label: string;
-  value: number;
-  tone?: 'neutral' | 'attention' | 'ok';
-}) {
-  return (
-    <div className={`summaryItem ${tone}`}>
-      <strong>{formatNumberAsBrazilianMoney(value)}</strong>
-      <span>{label}</span>
     </div>
   );
 }
@@ -362,10 +304,9 @@ function signedCurrentBalance(row?: CompanyReport['rows'][number]): number {
 function comparisonFormula(company: CompanyReport): string {
   const { comparisonReport } = company;
   if (comparisonReport.mode === 'fallback') {
-    return 'Caso 2: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) estiver zerada ou nao existir, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO) e 6 (RESULTADO E REGULARIZACAO) MENOS a conta 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS). Resumo: (3 + 6) - 2.4.13.';
+    return '(3 + 6) - 2.4.13';
   }
-
-  return 'Caso 1: Se 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS) for maior que 0, o calculo sera: A SOMA de 3 (RESULTADO DO PERIODO), 6 (RESULTADO E REGULARIZACAO) e 2.4.13 (LUCROS E PREJUIZOS ACUMULADOS) MENOS 1.1.04.019 (DISTRIBUICAO ANTECIPADA DE LUCROS). Resumo: (3 + 6 + 2.4.13) - 1.1.04.019.';
+  return '(3 + 6 + 2.4.13) - 1.1.04.019';
 }
 
 function buildCalculationRows(company: CompanyReport) {
@@ -383,15 +324,14 @@ function buildCalculationRows(company: CompanyReport) {
   }
 
   rows.push(
-    { label: 'Soma calculada', value: comparisonReport.baseValue },
+    { label: 'Soma Calculada', value: comparisonReport.baseValue },
     {
-      label:
-        comparisonReport.mode === 'fallback'
-          ? comparisonLabel('Valor comparado: 2.4.13', comparisonReport.account2413Row)
-          : comparisonLabel('Valor comparado: 1.1.04.019', comparisonReport.distributionRow),
+      label: comparisonReport.mode === 'fallback'
+          ? comparisonLabel('Conta 2.4.13', comparisonReport.account2413Row)
+          : comparisonLabel('Conta 1.1.04.019', comparisonReport.distributionRow),
       value: comparisonReport.targetValue
     },
-    { label: 'Diferenca', value: comparisonReport.difference }
+    { label: 'Diferença', value: comparisonReport.difference }
   );
 
   return rows;
@@ -419,16 +359,6 @@ function buildReportMeta(company: CompanyReport, kind: ReportKind) {
     count,
     hasAttention: count > 0
   };
-}
-
-function emptyStateMessage(kind: ReportKind): string {
-  if (kind === 'inverted') {
-    return 'Nenhuma ocorrencia de saldo invertido foi encontrada neste arquivo.';
-  }
-  if (kind === 'zero') {
-    return 'Nenhuma conta sem movimentacao foi encontrada neste periodo.';
-  }
-  return 'Nenhuma ocorrencia encontrada neste relatorio.';
 }
 
 function isAnalysisKind(kind: ReportKind): kind is AnalysisKind {

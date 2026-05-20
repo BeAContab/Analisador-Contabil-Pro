@@ -1,215 +1,134 @@
-import { ChangeEvent, DragEvent, useMemo, useState } from 'react';
+﻿import { lazy, Suspense, useMemo, useState } from 'react';
 import { CompanyCard } from './components/CompanyCard';
 import { CompanyReport } from './types';
-import { parsePdfFile } from './utils/parser';
+import { Navbar } from './components/Navbar';
+import { Footer } from './components/Footer';
+import { Dropzone } from './components/Dropzone';
+import { SummaryCards } from './components/SummaryCards';
+import { ProcessingOverlay } from './components/ProcessingOverlay';
+import { useFileProcessing } from './hooks/useFileProcessing';
+
+const PrivacyPolicy = lazy(() => import('./components/PrivacyPolicy').then((module) => ({ default: module.PrivacyPolicy })));
+const DataSecurity = lazy(() => import('./components/DataSecurity').then((module) => ({ default: module.DataSecurity })));
+const LocalProcessingDoc = lazy(() =>
+  import('./components/LocalProcessingDoc').then((module) => ({ default: module.LocalProcessingDoc }))
+);
+const ChatbotFab = lazy(() => import('./components/ChatbotFab').then((module) => ({ default: module.ChatbotFab })));
+
+type View = 'main' | 'privacy' | 'security' | 'docs';
 
 export function App() {
-  const [files, setFiles] = useState<File[]>([]);
-  const [reports, setReports] = useState<CompanyReport[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [message, setMessage] = useState('');
-  const [processingIndex, setProcessingIndex] = useState(0);
-  const [processingFileName, setProcessingFileName] = useState('');
+  const [view, setView] = useState<View>('main');
+  const {
+    files,
+    reports,
+    isProcessing,
+    isDragging,
+    message,
+    processingIndex,
+    processingFileName,
+    processingPercent,
+    totalUnclassified,
+    handleFiles,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    removeFile,
+    processFiles,
+    clearAll
+  } = useFileProcessing();
 
-  const totalRows = useMemo(() => reports.reduce((sum, report) => sum + report.rows.length, 0), [reports]);
-  const totalUnclassified = useMemo(
-    () => reports.reduce((sum, report) => sum + report.unclassified.length, 0),
-    [reports]
-  );
   const resultsSummary = useMemo(() => buildResultsSummary(reports), [reports]);
-  const processingPercent = files.length > 0 ? Math.round((processingIndex / files.length) * 100) : 0;
 
-  function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    addFiles(Array.from(event.target.files ?? []));
-    event.target.value = '';
-  }
+  const navigateToMain = () => {
+    setView('main');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  function addFiles(selected: File[]) {
-    const pdfs = selected.filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
-    const invalidCount = selected.length - pdfs.length;
-
-    if (invalidCount > 0) {
-      setMessage('Arquivo invalido. Envie apenas arquivos PDF.');
-    } else {
-      setMessage('');
-    }
-
-    setFiles((current) => {
-      const known = new Set(current.map((file) => `${file.name}-${file.size}-${file.lastModified}`));
-      const next = pdfs.filter((file) => !known.has(`${file.name}-${file.size}-${file.lastModified}`));
-      return [...current, ...next];
-    });
-  }
-
-  function handleDragOver(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    setIsDragging(true);
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      setIsDragging(false);
-    }
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setIsDragging(false);
-    addFiles(Array.from(event.dataTransfer.files));
-  }
-
-  function removeFile(fileToRemove: File) {
-    setFiles((current) => current.filter((file) => file !== fileToRemove));
-  }
-
-  async function processFiles() {
-    if (files.length === 0) {
-      setMessage('Envie um ou mais arquivos PDF para iniciar a analise.');
-      return;
-    }
-
-    setIsProcessing(true);
-    setMessage('');
-    setReports([]);
-    setProcessingIndex(0);
-    setProcessingFileName('');
-
-    const parsed: CompanyReport[] = [];
-    for (const [index, file] of files.entries()) {
-      setProcessingIndex(index + 1);
-      setProcessingFileName(file.name);
-      parsed.push(await parsePdfFile(file));
-      setReports([...parsed]);
-    }
-
-    setIsProcessing(false);
-    setProcessingIndex(0);
-    setProcessingFileName('');
-  }
-
-  function clearAll() {
-    setFiles([]);
-    setReports([]);
-    setMessage('');
-    setProcessingIndex(0);
-    setProcessingFileName('');
-  }
+  const handleFooterNavigate = (newView: View) => {
+    setView(newView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
-    <main>
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Processamento local no navegador</p>
-          <h1>Analisador de Balancetes em PDF</h1>
-          <p>
-            Envie balancetes analiticos em PDF para identificar alertas, inconsistencias e contas sem
-            movimentacao, com relatorios separados por empresa.
-          </p>
-        </div>
-      </section>
+    <div className="min-h-screen flex flex-col">
+      <Navbar onHomeClick={navigateToMain} />
 
-      <section className="uploadPanel" aria-label="Envio de arquivos">
-        <div
-          className={`uploadBox ${isDragging ? 'dragActive' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <input id="pdf-upload" type="file" accept="application/pdf,.pdf" multiple onChange={handleFiles} />
-          <label htmlFor="pdf-upload">
-            <strong>Envie um ou mais arquivos PDF de balancete</strong>
-            <span>Arraste e solte os PDFs aqui ou clique para selecionar os arquivos.</span>
-          </label>
-        </div>
+      <main className="flex-grow w-full max-w-container-max mx-auto px-gutter py-xl flex flex-col gap-xl">
+        {view === 'main' && (
+          <div className="space-y-xl animate-in fade-in duration-500">
+            <section className="flex flex-col gap-sm">
+              <h1 className="font-display-lg text-display-lg text-primary">Analisador de Balancetes</h1>
+              <p className="text-secondary font-body-md max-w-2xl">
+                Inicie a análise carregando seus arquivos contábeis em PDF para identificação automática de alertas,
+                saldos invertidos e inconsistências.
+              </p>
+            </section>
 
-        {message && <div className="message">{message}</div>}
+            <Dropzone
+              isDragging={isDragging}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onFileChange={handleFiles}
+              files={files}
+              onRemoveFile={removeFile}
+              isProcessing={isProcessing}
+              onProcess={processFiles}
+              onClear={clearAll}
+            />
 
-        {files.length > 0 && (
-          <div className="fileList">
-            <div className="fileListHeader">
-              <div>
-                <strong>{files.length} arquivo(s) selecionado(s)</strong>
-                <p className="fileListHint">Voce pode adicionar mais arquivos antes de processar ou remover apenas os que nao quiser analisar.</p>
+            {message && (
+              <div className="p-md bg-error-container text-on-error-container rounded-lg border border-error/20 flex items-center gap-md">
+                <span className="material-symbols-outlined">error</span>
+                <span className="font-medium">{message}</span>
               </div>
-              <label htmlFor="pdf-upload" className="inlineAction">
-                Adicionar mais arquivos
-              </label>
-            </div>
-            {files.map((file) => (
-              <div className="fileItem" key={`${file.name}-${file.size}-${file.lastModified}`}>
-                <span>{file.name}</span>
-                <button type="button" onClick={() => removeFile(file)}>
-                  Remover
-                </button>
-              </div>
-            ))}
+            )}
+
+            {reports.length > 0 && (
+              <section id="results" className="space-y-xl">
+                <div className="flex flex-col gap-sm border-b border-outline-variant pb-md">
+                  <span className="text-label-caps font-label-caps text-secondary uppercase">Resultados da Análise</span>
+                  <h2 className="font-headline-md text-primary">{reports.length} empresa(s) processada(s)</h2>
+                </div>
+
+                <SummaryCards
+                  companiesWithAlerts={resultsSummary.companiesWithAlerts}
+                  reportsWithOccurrences={resultsSummary.reportsWithOccurrences}
+                  totalOccurrences={resultsSummary.totalOccurrences}
+                  totalUnclassified={totalUnclassified}
+                />
+
+                <div className="space-y-lg">
+                  {reports.map((report) => (
+                    <CompanyCard company={report} key={report.id} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
 
-        <div className="primaryActions">
-          <button type="button" className="primaryButton" onClick={processFiles} disabled={isProcessing}>
-            {isProcessing ? 'Processando...' : 'Processar arquivos'}
-          </button>
-          <button type="button" className="secondaryButton" onClick={clearAll} disabled={isProcessing}>
-            Limpar arquivos
-          </button>
-        </div>
-      </section>
+        <Suspense fallback={<div className="text-secondary">Carregando conteúdo...</div>}>
+          {view === 'privacy' && <PrivacyPolicy />}
+          {view === 'security' && <DataSecurity />}
+          {view === 'docs' && <LocalProcessingDoc />}
+        </Suspense>
 
-      {isProcessing && (
-        <div className="loading">
-          <strong>Processando arquivos...</strong>
-          <span>
-            {processingIndex} de {files.length} arquivo(s) concluido(s) ({processingPercent}%)
-          </span>
-          {processingFileName && <span>Arquivo atual: {processingFileName}</span>}
-          <div className="loadingBar" aria-hidden="true">
-            <div style={{ width: `${processingPercent}%` }} />
-          </div>
-        </div>
-      )}
+        {isProcessing && processingIndex > 0 && (
+          <ProcessingOverlay
+            index={processingIndex}
+            total={files.length}
+            percent={processingPercent}
+            fileName={processingFileName}
+          />
+        )}
+      </main>
 
-      {reports.length > 0 && (
-        <section className="results">
-          <div className="resultsHeader">
-            <div>
-              <p className="eyebrow">Resultados</p>
-              <h2>{reports.length} arquivo(s) processado(s)</h2>
-            </div>
-            <span>{totalRows} linha(s) contabeis extraida(s)</span>
-          </div>
-
-          <div className="resultsSummary">
-            <SummaryCard label="Empresas com alertas" value={resultsSummary.companiesWithAlerts} tone="attention" />
-            <SummaryCard label="Relatorios com ocorrencia" value={resultsSummary.reportsWithOccurrences} tone="neutral" />
-            <SummaryCard label="Ocorrencias identificadas" value={resultsSummary.totalOccurrences} tone="neutral" />
-            <SummaryCard label="Linhas nao classificadas" value={totalUnclassified} tone={totalUnclassified > 0 ? 'attention' : 'ok'} />
-          </div>
-
-          {reports.map((report) => (
-            <CompanyCard company={report} key={report.id} />
-          ))}
-        </section>
-      )}
-    </main>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  tone
-}: {
-  label: string;
-  value: number;
-  tone: 'neutral' | 'attention' | 'ok';
-}) {
-  return (
-    <div className={`summaryCard ${tone}`}>
-      <strong>{value}</strong>
-      <span>{label}</span>
+      <Footer onNavigate={handleFooterNavigate} />
+      <Suspense fallback={null}>
+        <ChatbotFab reports={reports} isProcessing={isProcessing} />
+      </Suspense>
     </div>
   );
 }
