@@ -55,12 +55,12 @@ export function buildChatSuggestions(reports: CompanyReport[]): ChatSuggestion[]
 
 export function buildWelcomeMessage(reports: CompanyReport[]): string {
   if (reports.length === 0) {
-    return 'Sou a assistente do Analisador Contabil Pro. Posso explicar como o sistema funciona, quais alertas ele detecta e como interpretar os balancetes depois do processamento.';
+    return 'Sou a assistente do Analisador Contabil Pro. Posso explicar como o sistema funciona, quais alertas ele detecta e como interpretar balancetes com foco em risco, cautela tecnica e conferencia manual.';
   }
 
   const companyLabel = reports.length === 1 ? '1 empresa analisada' : `${reports.length} empresas analisadas`;
   const totalOccurrences = sumOccurrences(reports);
-  return `Sou a assistente do Analisador Contabil Pro. Ja tenho contexto de ${companyLabel} e ${totalOccurrences} ocorrencias identificadas. Posso resumir riscos, explicar regras e orientar a conferencia manual.`;
+  return `Sou a assistente do Analisador Contabil Pro. Ja tenho contexto de ${companyLabel} e ${totalOccurrences} ocorrencias identificadas. Posso resumir riscos, explicar regras, apontar limitacoes e orientar a conferencia manual.`;
 }
 
 export function generateChatbotResponse(input: string, reports: CompanyReport[]): string {

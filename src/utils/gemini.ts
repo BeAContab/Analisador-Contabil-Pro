@@ -62,18 +62,18 @@ export async function generateGeminiChatReply(params: {
 
 export function buildGeminiBootstrapReply(reports: CompanyReport[]): string {
   if (reports.length === 0) {
-    return 'Chave Gemini configurada. Assim que voce processar um balancete, eu consigo responder com contexto contabil real do arquivo analisado.';
+    return 'Chave Gemini configurada. Assim que voce processar um balancete, eu passo a responder com leitura mais senior, priorizacao de riscos, limitacoes explicitadas e proximos passos de conferencia.';
   }
 
-  return `Chave Gemini configurada. Ja tenho contexto de ${reports.length} empresa(s) processada(s) e posso interpretar os alertas com uma resposta mais contextualizada.`;
+  return `Chave Gemini configurada. Ja tenho contexto de ${reports.length} empresa(s) processada(s) e posso interpretar os alertas com uma resposta mais senior, priorizada por risco e com base tecnica mais consistente.`;
 }
 
 export function buildLocalFallbackNotice(errorMessage?: string): string {
   if (!errorMessage) {
-    return 'Gemini ainda nao esta configurado. Posso continuar no modo local, mas as respostas ficam menos inteligentes ate voce informar a chave da API.';
+    return 'Gemini ainda nao esta configurado. Posso continuar no modo local, mas a leitura fica menos profunda e com menor capacidade de priorizacao tecnica ate voce informar a chave da API.';
   }
 
-  return `Nao consegui usar o Gemini agora. Motivo: ${errorMessage} Posso continuar no modo local enquanto isso.`;
+  return `Nao consegui usar o Gemini agora. Motivo: ${errorMessage} Posso continuar no modo local enquanto isso, mantendo respostas mais cautelosas e resumidas.`;
 }
 
 function buildGeminiContents(history: ChatTurn[], userMessage: string) {
@@ -97,13 +97,19 @@ function buildGeminiContents(history: ChatTurn[], userMessage: string) {
 
 function buildSystemInstruction(): string {
   return [
-    'Voce e a IA do chatbot do Analisador Contabil Pro.',
-    'Seu papel e interpretar balancetes contabeis e os alertas gerados pelo sistema com foco em contabilidade brasileira.',
+    'Voce e a IA especialista do chatbot do Analisador Contabil Pro, com atuacao senior em analise de balancete no contexto brasileiro.',
+    'Seu objetivo e interpretar os achados do sistema com precisao tecnica, linguagem clara e foco em apoio a conferencia contabil.',
     'Responda sempre em portugues do Brasil.',
-    'Nao invente contas, valores ou conclusoes que nao estejam no contexto recebido.',
-    'Quando houver incerteza, diga explicitamente que se trata de hipotese ou limitacao de leitura do PDF.',
-    'Explique de forma pratica: o que aconteceu, por que isso importa e qual verificacao manual fazer em seguida.',
-    'Nao afirme conformidade fiscal ou contabil definitiva.',
+    'Nao invente contas, valores, documentos, fatos, pareceres ou conclusoes que nao estejam no contexto recebido.',
+    'Quando faltar dado, diferencie explicitamente [Fato], [Inferencia] e [Hipotese].',
+    'Quando houver risco alto, destaque isso logo no inicio da resposta.',
+    'Classifique os achados por severidade: Alto, Medio ou Baixo, considerando materialidade e impacto provavel no fechamento.',
+    'Explique de forma pratica o que aconteceu, por que isso importa e qual verificacao manual fazer em seguida.',
+    'Nao afirme conformidade fiscal, societaria ou contabil definitiva.',
+    'Considere como referencia de alto nivel a Lei 6.404/1976, as Leis 11.638/2007 e 11.941/2009, o Codigo Civil sobre escrituracao, a ITG 2000 (R1), a NBC TG Estrutura Conceitual, a NBC TG 26, NBC TG 23, NBC TG 16, NBC TG 25, NBC TG 27, NBC TG 47, NBC TG 48 e a NBC TG 1000 quando aplicavel.',
+    'Use essas referencias apenas como base interpretativa geral; nao cite artigo ou item especifico sem evidencia clara no contexto.',
+    'Antes de responder, valide internamente se voce usou apenas dados presentes no contexto, classificou a severidade, apontou limitacoes e sugeriu acoes praticas de conferencia.',
+    'Formato obrigatorio da resposta: Resumo executivo; Achados priorizados; Fundamentacao tecnica; Limitacoes e incertezas; Proximos passos.',
     'Se o usuario pedir algo fora do contexto do balancete, responda de forma breve e puxe a conversa de volta para o dominio contabil do produto.'
   ].join(' ');
 }
@@ -115,8 +121,22 @@ export function buildGeminiPrompt(reports: CompanyReport[], userMessage: string)
     'Contexto estruturado do sistema:',
     summarizeReportsForPrompt(reports),
     '',
+    'Checklist interno antes de responder:',
+    '- Use apenas dados presentes no contexto.',
+    '- Diferencie [Fato], [Inferencia] e [Hipotese] quando houver incerteza.',
+    '- Classifique a severidade dos achados em Alto, Medio ou Baixo.',
+    '- Informe limitacoes de parsing, ausencia de conta ou dado insuficiente.',
+    '- Sugira proximos passos concretos de conferencia.',
+    '',
+    'Formato obrigatorio da resposta:',
+    '1. Resumo executivo',
+    '2. Achados priorizados',
+    '3. Fundamentacao tecnica',
+    '4. Limitacoes e incertezas',
+    '5. Proximos passos',
+    '',
     'Instrucao de resposta:',
-    'Use apenas o contexto acima e a pergunta do usuario para responder de forma util, objetiva e tecnicamente cautelosa.',
+    'Use apenas o contexto acima e a pergunta do usuario para responder de forma util, objetiva, tecnicamente cautelosa e adequada a um contador senior.',
     '',
     `Pergunta do usuario: ${userMessage}`
   ].join('\n');
