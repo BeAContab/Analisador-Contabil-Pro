@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5 - 2026-05-21
+- Adicionada a coluna `Acao corretiva` nos relatorios exibidos em tela para orientar o contador sobre o proximo ajuste sugerido.
+- Exportacoes `XLSX` e `PDF` atualizadas para incluir a mesma orientacao por tipo de relatorio.
+- Padronizadas regras de orientacao corretiva para saldos invertidos, contas sem movimentacao, distribuicao x resultado e analises de clientes/fornecedores/estoques.
+
 ## 1.0.4 - 2026-05-21
 - Migracao da configuracao de deploy para Vercel, com remocao da base fixa do GitHub Pages no Vite.
 - Adicao de configuracao declarativa em `vercel.json` para build em `npm run build` com saida em `dist`.

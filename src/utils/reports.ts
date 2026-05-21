@@ -9,7 +9,8 @@ const balanceColumns = [
   'S. Anterior',
   'Debito',
   'Credito',
-  'S. Atual'
+  'S. Atual',
+  'Acao corretiva'
 ];
 
 const comparisonColumns = [
@@ -19,7 +20,8 @@ const comparisonColumns = [
   'Nome da Conta',
   'S. Atual',
   'Valor no calculo',
-  'Status'
+  'Status',
+  'Acao corretiva'
 ];
 
 export const analysisOrder: AnalysisKind[] = [
@@ -110,6 +112,53 @@ export function reportFileName(company: CompanyReport, extension: 'xlsx' | 'pdf'
   return `${slugify(company.companyName)}_relatorios-consolidados.${extension}`;
 }
 
+export function correctiveAction(kind: ReportKind, row?: LedgerLine | InvertedBalanceRow) {
+  if (kind === 'inverted') {
+    if ((row as InvertedBalanceRow | undefined)?.alertType === 'Ativo com saldo C') {
+      return 'Revisar classificacao, natureza e lancamentos da conta do ativo para eliminar saldo credor indevido no encerramento.';
+    }
+    if ((row as InvertedBalanceRow | undefined)?.alertType === 'Passivo/PL com saldo D') {
+      return 'Revisar classificacao, natureza e lancamentos da conta do passivo ou PL para eliminar saldo devedor indevido no encerramento.';
+    }
+    return 'Revisar a natureza contabil e os lancamentos que formaram o saldo final para corrigir a inversao identificada.';
+  }
+  if (kind === 'zero') {
+    return 'Confirmar se a conta deveria ter movimentacao no periodo; se sim, revisar integracao, parametrizacao e lancamentos. Se nao, avaliar ocultar, encerrar ou reclassificar a conta.';
+  }
+  if (kind === 'comparison') {
+    return 'Conferir a composicao das contas 3, 6, 2.4.13 e 1.1.04.019, validar a formula aplicada no periodo e ajustar lancamentos ou classificacoes que expliquem a diferenca.';
+  }
+  if (kind === 'analysis1') {
+    return 'Conferir se o saldo do cliente foi baixado corretamente; ajustar recebimentos, compensacoes ou reclassificacoes para eliminar saldo residual abaixo do minimo esperado.';
+  }
+  if (kind === 'analysis2') {
+    return 'Validar cadastro e historico do cliente; se for pessoa fisica fora da politica definida, corrigir cadastro, documentacao de suporte ou classificacao comercial/contabil.';
+  }
+  if (kind === 'analysis3') {
+    return 'Conciliar o saldo de clientes com as receitas operacionais vinculadas, revisando reconhecimento de receita, baixas e possiveis lancamentos faltantes ou em conta incorreta.';
+  }
+  if (kind === 'analysis4') {
+    return 'Investigar o motivo do saldo residual do cliente e ajustar baixas, estornos, abatimentos ou reclassificacoes para zerar diferencas indevidas.';
+  }
+  if (kind === 'analysis5') {
+    return 'Revisar se houve faturamento, recebimento ou baixa sem credito contabil correspondente e regularizar os lancamentos do periodo.';
+  }
+  if (kind === 'analysis6') {
+    return 'Conferir se houve compras, pagamentos ou baixas sem debito contabil correspondente e regularizar os lancamentos do fornecedor no periodo.';
+  }
+  if (kind === 'analysis7') {
+    return 'Comparar saldo de estoques com fornecedores relacionados, validar entradas e saidas e ajustar classificacao ou lancamentos que estejam distorcendo a conciliacao.';
+  }
+  if (kind === 'analysis8') {
+    return 'Analisar o saldo residual do fornecedor e ajustar pagamentos, estornos, compensacoes ou reclassificacoes para eliminar diferencas indevidas.';
+  }
+  if (kind === 'analysis9') {
+    return 'Verificar se houve reconhecimento de obrigacao sem a contrapartida esperada em debito e corrigir os lancamentos do fornecedor.';
+  }
+
+  return 'Revisar a origem do alerta e ajustar os lancamentos ou classificacoes contabeis relacionados.';
+}
+
 export function hasExportContent(company: CompanyReport): boolean {
   return reportTabs.some((tab) => reportHasOccurrence(company, tab.kind));
 }
@@ -127,7 +176,7 @@ export async function downloadXlsx(company: CompanyReport) {
         company,
         reportTitle('inverted'),
         balanceColumns,
-        balanceBody(company.invertedRows),
+        balanceBody(company.invertedRows, 'inverted'),
         createdAt,
         undefined,
         reportIntro('inverted')
@@ -143,7 +192,7 @@ export async function downloadXlsx(company: CompanyReport) {
         company,
         reportTitle('zero'),
         balanceColumns,
-        balanceBody(company.zeroMovementRows),
+        balanceBody(company.zeroMovementRows, 'zero'),
         createdAt,
         undefined,
         reportIntro('zero')
@@ -177,7 +226,7 @@ export async function downloadXlsx(company: CompanyReport) {
         company,
         reportTitle(kind, company),
         balanceColumns,
-        balanceBody(reportRows(company, kind)),
+        balanceBody(reportRows(company, kind), kind),
         createdAt,
         analysisMessage(company, kind),
         reportIntro(kind, company),
@@ -215,7 +264,7 @@ export async function downloadPdf(company: CompanyReport) {
       autoTable,
       reportTitle('inverted'),
       balanceColumns,
-      balanceBody(company.invertedRows),
+      balanceBody(company.invertedRows, 'inverted'),
       nextY,
       undefined,
       reportIntro('inverted')
@@ -227,7 +276,7 @@ export async function downloadPdf(company: CompanyReport) {
       autoTable,
       reportTitle('zero'),
       balanceColumns,
-      balanceBody(company.zeroMovementRows),
+      balanceBody(company.zeroMovementRows, 'zero'),
       nextY + 34,
       undefined,
       reportIntro('zero')
@@ -253,7 +302,7 @@ export async function downloadPdf(company: CompanyReport) {
       autoTable,
       reportTitle(kind, company),
       balanceColumns,
-      balanceBody(reportRows(company, kind)),
+      balanceBody(reportRows(company, kind), kind),
       nextY + 34,
       analysisMessage(company, kind),
       reportIntro(kind, company),
@@ -301,7 +350,8 @@ function buildWorksheet(
     { wch: 16 },
     { wch: 16 },
     { wch: 16 },
-    { wch: 16 }
+    { wch: 16 },
+    { wch: 60 }
   ];
   return worksheet;
 }
@@ -363,7 +413,7 @@ function addPdfSection(
   return getFinalY(doc);
 }
 
-function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>) {
+function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>, kind: Exclude<ReportKind, 'comparison'>) {
   return rows.map((row) => [
     classifyAccount(row.account),
     row.account,
@@ -372,7 +422,8 @@ function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>) {
     row.previousBalance,
     row.debit,
     row.credit,
-    row.currentBalance
+    row.currentBalance,
+    correctiveAction(kind, row)
   ]);
 }
 
@@ -380,7 +431,7 @@ function comparisonBody(company: CompanyReport) {
   const { comparisonReport } = company;
   const status = comparisonReport.message;
   const rows: Array<Array<string | number>> = [
-    ['Formula', '', '', comparisonFormula(company), '', '', status]
+    ['Formula', '', '', comparisonFormula(company), '', '', status, correctiveAction('comparison')]
   ];
 
   rows.push(
@@ -388,7 +439,8 @@ function comparisonBody(company: CompanyReport) {
       comparisonLabel('Conta 3', comparisonReport.account3Row),
       comparisonReport.account3Row,
       signedCurrentBalance(comparisonReport.account3Row),
-      status
+      status,
+      correctiveAction('comparison')
     )
   );
   rows.push(
@@ -396,7 +448,8 @@ function comparisonBody(company: CompanyReport) {
       comparisonLabel('Conta 6', comparisonReport.account6Row),
       comparisonReport.account6Row,
       signedCurrentBalance(comparisonReport.account6Row),
-      status
+      status,
+      correctiveAction('comparison')
     )
   );
   if (comparisonReport.mode === 'distribution') {
@@ -405,7 +458,8 @@ function comparisonBody(company: CompanyReport) {
         comparisonLabel('Conta 2.4.13', comparisonReport.account2413Row),
         comparisonReport.account2413Row,
         signedCurrentBalance(comparisonReport.account2413Row),
-        status
+        status,
+        correctiveAction('comparison')
       )
     );
   }
@@ -416,7 +470,8 @@ function comparisonBody(company: CompanyReport) {
         : comparisonLabel('Conta comparada: 1.1.04.019', comparisonReport.distributionRow),
       comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow,
       comparisonReport.targetValue,
-      status
+      status,
+      correctiveAction('comparison')
     )
   );
 
@@ -427,7 +482,8 @@ function comparisonBody(company: CompanyReport) {
     '',
     '',
     formatNumberAsBrazilianMoney(comparisonReport.baseValue),
-    status
+    status,
+    correctiveAction('comparison')
   ]);
 
   rows.push([
@@ -437,7 +493,8 @@ function comparisonBody(company: CompanyReport) {
     comparisonReport.mode === 'fallback' ? 'S. Atual da conta 2.4.13' : 'S. Atual da conta 1.1.04.019',
     '',
     formatNumberAsBrazilianMoney(comparisonReport.targetValue),
-    status
+    status,
+    correctiveAction('comparison')
   ]);
 
   rows.push([
@@ -447,13 +504,14 @@ function comparisonBody(company: CompanyReport) {
     'Soma calculada menos valor comparado',
     '',
     formatNumberAsBrazilianMoney(comparisonReport.difference),
-    status
+    status,
+    correctiveAction('comparison')
   ]);
 
   return rows;
 }
 
-function comparisonRow(label: string, row: LedgerLine | undefined, value: number, status: string) {
+function comparisonRow(label: string, row: LedgerLine | undefined, value: number, status: string, action: string) {
   return [
     label,
     row ? classifyAccount(row.account) : '',
@@ -461,7 +519,8 @@ function comparisonRow(label: string, row: LedgerLine | undefined, value: number
     row?.name ?? 'Conta nao localizada',
     row?.currentBalance ?? '',
     formatNumberAsBrazilianMoney(value),
-    status
+    status,
+    action
   ];
 }
 
