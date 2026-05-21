@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4 - 2026-05-21
+- Migracao da configuracao de deploy para Vercel, com remocao da base fixa do GitHub Pages no Vite.
+- Adicao de configuracao declarativa em `vercel.json` para build em `npm run build` com saida em `dist`.
+- Remocao do workflow de deploy do GitHub Pages e ignorado do diretório `.vercel/`.
+
 ## 1.0.3 - 2026-05-20
 - Evolucao do agente Gemini para um perfil senior de analise de balancete, com priorizacao de risco, cautela tecnica e referencias normativas de alto nivel.
 - Padronizacao do prompt do Gemini com checklist interno e formato obrigatorio de resposta: resumo executivo, achados priorizados, fundamentacao tecnica, limitacoes e proximos passos.

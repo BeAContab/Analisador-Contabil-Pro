@@ -14,9 +14,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 vite-dev*.log
+.vercel/
 brain/
 .DS_Store
 Thumbs.db
 design stitch/
-~$pdates.docx
+~$*.docx
+~$*.xlsx
+updates.docx
 etapas.xlsx
+*.docx

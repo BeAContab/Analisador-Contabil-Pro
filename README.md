@@ -107,6 +107,16 @@ npm run build
 npm run preview
 ```
 
+## Deploy na Vercel
+
+O projeto esta configurado para deploy estatico na Vercel.
+
+- Framework: `Vite`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Ao importar o repositorio na Vercel, a plataforma deve detectar essa configuracao automaticamente. Se existir alguma configuracao manual antiga de GitHub Pages, ela nao e mais necessaria para a publicacao principal.
+
 ## Configuracao do Gemini
 
 Voce pode usar o chatbot em dois modos:

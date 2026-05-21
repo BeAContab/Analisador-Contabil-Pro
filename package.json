@@ -1,6 +1,6 @@
 {
   "name": "analisador-balancetes-pdf",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Aplicacao web para analise de balancetes contabeis em PDF com relatorios e chatbot com IA.",
   "license": "MIT",
