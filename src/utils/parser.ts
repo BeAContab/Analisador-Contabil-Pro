@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { AnalysisReport, BalanceComparisonReport, CompanyReport, LedgerLine, UnclassifiedLine } from '../types';
+import { AnalysisReport, BalanceComparisonReport, CompanyReport, DepreciationPairRow, LedgerLine, UnclassifiedLine } from '../types';
 import { balanceNature, isZeroMoney, parseBrazilianMoney } from './format';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -364,7 +364,9 @@ function buildAnalysisReports(rows: LedgerLine[]): AnalysisReport[] {
     buildAnalysis6(rows),
     buildAnalysis7(rows),
     buildAnalysis8(rows),
-    buildAnalysis9(rows)
+    buildAnalysis9(rows),
+    buildAnalysis10(rows),
+    buildAnalysis11(rows)
   ];
 }
 
@@ -581,6 +583,197 @@ function buildAnalysis9(rows: LedgerLine[]): AnalysisReport {
   };
 }
 
+function buildAnalysis10(rows: LedgerLine[]): AnalysisReport {
+  const cmvRows = rows.filter((row) => row.code === '3001');
+  const productRows = rows.filter((row) => row.code === '2603');
+  const merchandiseRows = rows.filter((row) => row.code === '2652');
+  const serviceRows = rows.filter((row) => row.code === '2700');
+
+  const cmvDebits = cmvRows.reduce((sum, row) => sum + row.debitNumber, 0);
+  const cmvCredits = cmvRows.reduce((sum, row) => sum + row.creditNumber, 0);
+  const netCmv = cmvDebits - cmvCredits;
+  const productCredits = sumCredits(productRows);
+  const merchandiseCredits = sumCredits(merchandiseRows);
+  const serviceCredits = sumCredits(serviceRows);
+  const totalRevenue = productCredits + merchandiseCredits + serviceCredits;
+  const percentage = totalRevenue > 0 ? netCmv / totalRevenue : 0;
+  const missingCodes: string[] = [];
+  if (cmvRows.length === 0) missingCodes.push('3001');
+  if (productRows.length === 0) missingCodes.push('2603');
+  if (merchandiseRows.length === 0) missingCodes.push('2652');
+  if (serviceRows.length === 0) missingCodes.push('2700');
+  const hasMissingRows = missingCodes.length > 0;
+  const hasZeroRevenue = numbersAreEqual(totalRevenue, 0);
+  const isAttention = hasMissingRows || hasZeroRevenue || percentage > 1;
+  const calculationRows = isAttention
+    ? [...cmvRows, ...productRows, ...merchandiseRows, ...serviceRows]
+    : [];
+
+  let message =
+    'Tudo OK: o CMV liquido do Cod. R. 3001 nao ultrapassa a soma das receitas dos Cod. R. 2603, 2652 e 2700.';
+
+  if (hasMissingRows) {
+    message =
+      `Atencao: base incompleta para o calculo do CMV/Receita. Cod. R. ausente(s): ${missingCodes.join(', ')}.`;
+  } else if (hasZeroRevenue) {
+    message =
+      'Atencao: a soma das receitas dos Cod. R. 2603, 2652 e 2700 ficou zerada, entao o percentual de CMV nao pode ser calculado.';
+  } else if (percentage > 1) {
+    message =
+      'Atencao: o CMV liquido do Cod. R. 3001 esta maior que a soma das receitas dos Cod. R. 2603, 2652 e 2700.';
+  }
+
+  return {
+    kind: 'analysis10',
+    title: 'CMV x Receita Mercadorias',
+    intro:
+      'Calcula (Debitos do Cod. R. 3001 menos Creditos do Cod. R. 3001) dividido pela soma dos Creditos dos Cod. R. 2603, 2652 e 2700.',
+    message,
+    rows: calculationRows,
+    isAttention,
+    calculation: {
+      formula:
+        '(Debitos Cod. R. 3001 - Creditos Cod. R. 3001) / (Creditos Cod. R. 2603 + Creditos Cod. R. 2652 + Creditos Cod. R. 2700)',
+      items: [
+        { label: 'Debitos Cod. R. 3001', value: cmvDebits },
+        { label: 'Creditos Cod. R. 3001', value: cmvCredits },
+        { label: 'CMV liquido', value: netCmv },
+        { label: 'Creditos Cod. R. 2603', value: productCredits },
+        { label: 'Creditos Cod. R. 2652', value: merchandiseCredits },
+        { label: 'Creditos Cod. R. 2700', value: serviceCredits },
+        { label: 'Receita total considerada', value: totalRevenue },
+        { label: 'Percentual CMV/Receita', value: percentage, format: 'percentage' }
+      ]
+    }
+  };
+}
+
+function buildAnalysis11(rows: LedgerLine[]): AnalysisReport {
+  const assetRoot = rows.find((row) => row.account === '1.2.05' && normalizeForCompare(row.name) === 'IMOBILIZADO');
+  const depreciationRoot = rows.find(
+    (row) =>
+      row.account === '1.2.05.007' &&
+      normalizeForCompare(row.name).includes('DEPRECIACAO/AMORTIZACAO/EXAUST')
+  );
+
+  const missingRoots = !assetRoot || !depreciationRoot;
+  if (missingRoots) {
+    return {
+      kind: 'analysis11',
+      title: 'Depreciacao x Bens',
+      intro:
+        'Compara os valores de S. Atual dos bens dentro de IMOBILIZADO com suas respectivas contas de depreciacao acumulada, excluindo IMOBILIZADO EM ANDAMENTO.',
+      message: 'Atencao: nao foi possivel localizar as contas raiz de IMOBILIZADO e/ou (-)DEPRECIACAO/AMORTIZACAO/EXAUSTAO ACUMULADA.',
+      rows: [],
+      depreciationPairs: [],
+      isAttention: true
+    };
+  }
+
+  const excludedRoot = rows.find(
+    (row) =>
+      row.account.startsWith(`${assetRoot.account}.`) &&
+      normalizeForCompare(row.name) === 'IMOBILIZADO EM ANDAMENTO'
+  );
+  const excludedPrefix = excludedRoot?.account;
+
+  const assetRows = rows.filter((row) => {
+    if (row.account === assetRoot.account) return false;
+    if (!row.account.startsWith(`${assetRoot.account}.`)) return false;
+    if (row.account.startsWith(`${depreciationRoot.account}.`)) return false;
+    if (excludedPrefix && (row.account === excludedPrefix || row.account.startsWith(`${excludedPrefix}.`))) return false;
+    return true;
+  });
+
+  const depreciationRows = rows.filter((row) => {
+    if (row.account === depreciationRoot.account) return false;
+    return row.account.startsWith(`${depreciationRoot.account}.`);
+  });
+
+  const assetMap = new Map<string, LedgerLine[]>();
+  assetRows.forEach((row) => {
+    const key = normalizeAssetDepreciationPairName(row.name);
+    if (!key) return;
+    const existing = assetMap.get(key) ?? [];
+    existing.push(row);
+    assetMap.set(key, existing);
+  });
+
+  const flaggedRows: LedgerLine[] = [];
+  const depreciationPairs: DepreciationPairRow[] = [];
+  const usedAssetAccounts = new Set<string>();
+  const calculationItems: Array<{ label: string; value: number }> = [];
+
+  depreciationRows.forEach((depreciationRow) => {
+    const key = normalizeAssetDepreciationPairName(depreciationRow.name);
+    if (!key) return;
+
+    const assetCandidates = (assetMap.get(key) ?? []).sort((left, right) => right.account.length - left.account.length);
+    const matchedAsset = assetCandidates.find((candidate) => !usedAssetAccounts.has(candidate.account));
+    const depreciationValue = absoluteCurrentBalance(depreciationRow);
+
+    if (!matchedAsset) {
+      flaggedRows.push(depreciationRow);
+      depreciationPairs.push({
+        assetCode: '',
+        assetName: 'Bem equivalente nao localizado',
+        assetCurrentBalance: '',
+        depreciationCode: depreciationRow.code ?? '',
+        depreciationName: depreciationRow.name,
+        depreciationCurrentBalance: depreciationRow.currentBalance,
+        correctiveAction: 'Localizar ou cadastrar o bem correspondente a esta depreciacao/exaustao e revisar a classificacao contabil.'
+      });
+      calculationItems.push({
+        label: `Depreciacao sem bem equivalente: ${depreciationRow.name}`,
+        value: depreciationValue
+      });
+      return;
+    }
+
+    usedAssetAccounts.add(matchedAsset.account);
+    const assetValue = absoluteCurrentBalance(matchedAsset);
+
+    if (depreciationValue > assetValue) {
+      flaggedRows.push(matchedAsset, depreciationRow);
+      depreciationPairs.push({
+        assetCode: matchedAsset.code ?? '',
+        assetName: matchedAsset.name,
+        assetCurrentBalance: matchedAsset.currentBalance,
+        depreciationCode: depreciationRow.code ?? '',
+        depreciationName: depreciationRow.name,
+        depreciationCurrentBalance: depreciationRow.currentBalance,
+        correctiveAction: 'Revisar o pareamento entre o bem e sua depreciacao, pois a depreciacao acumulada esta maior que o valor do bem.'
+      });
+      calculationItems.push(
+        { label: `Bem: ${matchedAsset.name}`, value: assetValue },
+        { label: `Depreciacao: ${depreciationRow.name}`, value: depreciationValue },
+        { label: `Excesso de depreciacao: ${matchedAsset.name}`, value: depreciationValue - assetValue }
+      );
+    }
+  });
+
+  return {
+    kind: 'analysis11',
+    title: 'Depreciacao x Bens',
+    intro:
+      'Compara os valores de S. Atual de cada bem dentro de IMOBILIZADO com a sua depreciacao equivalente, ignorando C/D e parenteses, e excluindo IMOBILIZADO EM ANDAMENTO.',
+    message:
+      depreciationPairs.length > 0
+        ? 'Atencao: foram encontradas depreciacoes maiores que os bens equivalentes e/ou depreciacoes sem bem correspondente.'
+        : 'Tudo OK: nao foram encontradas depreciacoes maiores que os bens equivalentes nem depreciacoes sem bem correspondente.',
+    rows: flaggedRows,
+    depreciationPairs,
+    isAttention: depreciationPairs.length > 0,
+    calculation: calculationItems.length > 0
+      ? {
+          formula:
+            'Comparacao entre o valor numerico de S. Atual dos bens do grupo IMOBILIZADO e o valor numerico de S. Atual das respectivas contas de depreciacao acumulada equivalentes.',
+          items: calculationItems
+        }
+      : undefined
+  };
+}
+
 function findAccountRow(rows: LedgerLine[], account: string): LedgerLine | undefined {
   return rows.find((row) => row.account === account);
 }
@@ -617,6 +810,21 @@ function normalizeForCompare(value: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeAssetDepreciationPairName(value: string): string {
+  return normalizeForCompare(value)
+    .replace(/^\(-\)\s*/g, '')
+    .replace(/P\//g, ' PARA ')
+    .replace(/\bCONTR\.?/g, ' CONTRATUAIS ')
+    .replace(/\bEXPL\.?/g, ' EXPLORACAO ')
+    .replace(/\bDEPREC(?:IACAO)?\.?\s*/g, '')
+    .replace(/\bAMORT(?:IZACAO)?\.?\s*/g, '')
+    .replace(/\bEXAUST(?:AO)?\.?\s*/g, '')
+    .replace(/\bACUMULADA\b/g, '')
+    .replace(/[.\-_/]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

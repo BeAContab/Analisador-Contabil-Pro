@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.9 - 2026-05-22
+- Refinada a analise `Depreciacao x Bens` com pareamento semantico entre bens e depreciacoes, cobrindo variacoes como `p/`, `Contr.` e `Expl.`.
+- O relatorio passou a usar colunas especificas para bem e depreciacao/amortizacao/exaustao, em vez da tabela contabil generica.
+- Exportacoes `XLSX` e `PDF` da analise `Depreciacao x Bens` agora seguem o layout pareado com acao corretiva por linha.
+
+## 1.0.8 - 2026-05-22
+- Adicionada a analise `Depreciacao x Bens`, comparando os valores numericos de `S. Atual` entre bens do grupo `IMOBILIZADO` e suas depreciacoes equivalentes.
+- Excluido da validacao o grupo `IMOBILIZADO EM ANDAMENTO` e suas contas filhas.
+- A analise agora sinaliza dois cenarios: depreciacao maior que o bem equivalente e depreciacao sem bem correspondente.
+
+## 1.0.7 - 2026-05-22
+- Ajustada a analise `CMV x Receita Mercadorias` para diferenciar o motivo de atencao: percentual acima de 100%, base incompleta (Cod. R. ausentes) ou receita total zerada.
+- Atualizado o quadro de percentual para exibir mensagem coerente com o motivo real do alerta.
+- Refinada a acao corretiva do relatorio para cobrir os tres cenarios de validacao.
+
+## 1.0.6 - 2026-05-22
+- Adicionada a analise `CMV x Receita Mercadorias` com a formula baseada no Cod. R. 3001 dividido pela soma dos creditos dos Cod. R. 2603, 2652 e 2700.
+- Incluido quadro visual com o percentual `CMV/Receita` na interface quando o relatorio estiver ativo.
+- Exportacoes `XLSX` e `PDF` passaram a respeitar itens de calculo em formato percentual.
+
 ## 1.0.5 - 2026-05-21
 - Adicionada a coluna `Acao corretiva` nos relatorios exibidos em tela para orientar o contador sobre o proximo ajuste sugerido.
 - Exportacoes `XLSX` e `PDF` atualizadas para incluir a mesma orientacao por tipo de relatorio.

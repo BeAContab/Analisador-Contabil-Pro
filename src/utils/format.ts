@@ -58,3 +58,11 @@ export function formatNumberAsBrazilianMoney(value: number): string {
     maximumFractionDigits: 2
   }).format(value);
 }
+
+export function formatNumberAsPercentage(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'percent',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}

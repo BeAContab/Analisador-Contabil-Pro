@@ -64,7 +64,9 @@ export type AnalysisKind =
   | 'analysis6'
   | 'analysis7'
   | 'analysis8'
-  | 'analysis9';
+  | 'analysis9'
+  | 'analysis10'
+  | 'analysis11';
 
 export interface AnalysisReport {
   kind: AnalysisKind;
@@ -72,6 +74,7 @@ export interface AnalysisReport {
   intro: string;
   message: string;
   rows: LedgerLine[];
+  depreciationPairs?: DepreciationPairRow[];
   isAttention: boolean;
   calculation?: AnalysisCalculation;
 }
@@ -86,4 +89,15 @@ export interface AnalysisCalculation {
 export interface AnalysisCalculationItem {
   label: string;
   value: number;
+  format?: 'money' | 'percentage';
+}
+
+export interface DepreciationPairRow {
+  assetCode: string;
+  assetName: string;
+  assetCurrentBalance: string;
+  depreciationCode: string;
+  depreciationName: string;
+  depreciationCurrentBalance: string;
+  correctiveAction: string;
 }

@@ -1,5 +1,5 @@
-import { AnalysisCalculation, AnalysisKind, CompanyReport, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
-import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, nowLabel, parseBrazilianMoney, slugify } from './format';
+import { AnalysisCalculation, AnalysisKind, CompanyReport, DepreciationPairRow, InvertedBalanceRow, LedgerLine, ReportKind } from '../types';
+import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, formatNumberAsPercentage, nowLabel, parseBrazilianMoney, slugify } from './format';
 
 const balanceColumns = [
   'Natureza',
@@ -24,6 +24,16 @@ const comparisonColumns = [
   'Acao corretiva'
 ];
 
+const depreciationColumns = [
+  'Cod. R. do bem',
+  'Nome da Conta do bem',
+  'S. Atual do bem',
+  'Cod. R. da depreciacao/amortizacao/exaustao',
+  'Nome da Conta da depreciacao/amortizacao/exaustao',
+  'S. Atual da depreciacao/amortizacao/exaustao',
+  'Acao corretiva'
+];
+
 export const analysisOrder: AnalysisKind[] = [
   'analysis1',
   'analysis2',
@@ -33,7 +43,9 @@ export const analysisOrder: AnalysisKind[] = [
   'analysis6',
   'analysis7',
   'analysis8',
-  'analysis9'
+  'analysis9',
+  'analysis10',
+  'analysis11'
 ];
 
 export const reportTabs: Array<{ kind: ReportKind; label: string }> = [
@@ -48,7 +60,9 @@ export const reportTabs: Array<{ kind: ReportKind; label: string }> = [
   { kind: 'analysis6', label: 'Fornecedores sem Debito no Periodo' },
   { kind: 'analysis7', label: 'Validacao Estoques x Fornecedores' },
   { kind: 'analysis8', label: 'Fornecedores com Saldo Residual' },
-  { kind: 'analysis9', label: 'Fornecedores com Credito sem Debito' }
+  { kind: 'analysis9', label: 'Fornecedores com Credito sem Debito' },
+  { kind: 'analysis10', label: 'CMV x Receita Mercadorias' },
+  { kind: 'analysis11', label: 'Depreciacao x Bens' }
 ];
 
 export function reportRows(company: CompanyReport, kind: ReportKind) {
@@ -65,6 +79,7 @@ export function reportOccurrenceCount(company: CompanyReport, kind: ReportKind) 
 
   const report = company.analysisReports.find((item) => item.kind === kind);
   if (!report) return 0;
+  if (kind === 'analysis11') return report.depreciationPairs?.length ?? 0;
   return report.rows.length > 0 ? report.rows.length : report.isAttention ? 1 : 0;
 }
 
@@ -93,6 +108,10 @@ export function analysisAttention(company: CompanyReport, kind: AnalysisKind): b
 
 export function analysisCalculation(company: CompanyReport, kind: AnalysisKind): AnalysisCalculation | undefined {
   return company.analysisReports.find((report) => report.kind === kind)?.calculation;
+}
+
+export function analysisDepreciationPairs(company: CompanyReport, kind: AnalysisKind): DepreciationPairRow[] {
+  return company.analysisReports.find((report) => report.kind === kind)?.depreciationPairs ?? [];
 }
 
 export function reportIntro(kind: ReportKind, company?: CompanyReport): string {
@@ -154,6 +173,12 @@ export function correctiveAction(kind: ReportKind, row?: LedgerLine | InvertedBa
   }
   if (kind === 'analysis9') {
     return 'Verificar se houve reconhecimento de obrigacao sem a contrapartida esperada em debito e corrigir os lancamentos do fornecedor.';
+  }
+  if (kind === 'analysis10') {
+    return 'Conferir os Cod. R. 3001, 2603, 2652 e 2700, completar base ausente quando houver, validar receita total diferente de zero e revisar classificacoes/lancamentos se o percentual de CMV ultrapassar 100%.';
+  }
+  if (kind === 'analysis11') {
+    return 'Conferir se cada conta de depreciacao possui bem equivalente, validar o pareamento entre bem e depreciacao e revisar classificacoes/lancamentos quando a depreciacao superar o valor do bem.';
   }
 
   return 'Revisar a origem do alerta e ajustar os lancamentos ou classificacoes contabeis relacionados.';
@@ -219,14 +244,15 @@ export async function downloadXlsx(company: CompanyReport) {
 
   analysisOrder.forEach((kind, index) => {
     if (!reportHasOccurrence(company, kind)) return;
+    const usesDepreciationPairs = kind === 'analysis11';
     XLSX.utils.book_append_sheet(
       workbook,
       buildWorksheet(
         XLSX.utils.aoa_to_sheet,
         company,
         reportTitle(kind, company),
-        balanceColumns,
-        balanceBody(reportRows(company, kind), kind),
+        usesDepreciationPairs ? depreciationColumns : balanceColumns,
+        usesDepreciationPairs ? depreciationBody(analysisDepreciationPairs(company, kind)) : balanceBody(reportRows(company, kind), kind),
         createdAt,
         analysisMessage(company, kind),
         reportIntro(kind, company),
@@ -297,12 +323,13 @@ export async function downloadPdf(company: CompanyReport) {
 
   analysisOrder.forEach((kind) => {
     if (!reportHasOccurrence(company, kind)) return;
+    const usesDepreciationPairs = kind === 'analysis11';
     nextY = addPdfSection(
       doc,
       autoTable,
       reportTitle(kind, company),
-      balanceColumns,
-      balanceBody(reportRows(company, kind), kind),
+      usesDepreciationPairs ? depreciationColumns : balanceColumns,
+      usesDepreciationPairs ? depreciationBody(analysisDepreciationPairs(company, kind)) : balanceBody(reportRows(company, kind), kind),
       nextY + 34,
       analysisMessage(company, kind),
       reportIntro(kind, company),
@@ -335,7 +362,7 @@ function buildWorksheet(
     ...(intro ? [['Introducao', intro]] : []),
     ...(message ? [['Status', message]] : []),
     ...(calculation
-      ? [['Formula', calculation.formula], ...calculation.items.map((item) => [item.label, formatNumberAsBrazilianMoney(item.value)])]
+      ? [['Formula', calculation.formula], ...calculation.items.map((item) => [item.label, formatCalculationValue(item.value, item.format)])]
       : []),
     [],
     columns,
@@ -394,7 +421,7 @@ function addPdfSection(
     doc.text(calculation.formula, 40, tableStartY, { maxWidth: doc.internal.pageSize.getWidth() - 80 });
     tableStartY += 12;
     calculation.items.forEach((item) => {
-      doc.text(`${item.label}: ${formatNumberAsBrazilianMoney(item.value)}`, 40, tableStartY, {
+      doc.text(`${item.label}: ${formatCalculationValue(item.value, item.format)}`, 40, tableStartY, {
         maxWidth: doc.internal.pageSize.getWidth() - 80
       });
       tableStartY += 10;
@@ -424,6 +451,18 @@ function balanceBody(rows: Array<LedgerLine | InvertedBalanceRow>, kind: Exclude
     row.credit,
     row.currentBalance,
     correctiveAction(kind, row)
+  ]);
+}
+
+function depreciationBody(rows: DepreciationPairRow[]) {
+  return rows.map((row) => [
+    row.assetCode,
+    row.assetName,
+    row.assetCurrentBalance,
+    row.depreciationCode,
+    row.depreciationName,
+    row.depreciationCurrentBalance,
+    row.correctiveAction
   ]);
 }
 
@@ -545,4 +584,8 @@ function comparisonFormula(company: CompanyReport): string {
 
 function getFinalY(doc: JsPdfInstance) {
   return (doc as JsPdfInstance & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 150;
+}
+
+function formatCalculationValue(value: number, format: 'money' | 'percentage' = 'money') {
+  return format === 'percentage' ? formatNumberAsPercentage(value) : formatNumberAsBrazilianMoney(value);
 }

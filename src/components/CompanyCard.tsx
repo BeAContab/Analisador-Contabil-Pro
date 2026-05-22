@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnalysisKind, CompanyReport, ReportKind } from '../types';
-import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, parseBrazilianMoney } from '../utils/format';
+import { balanceNature, classifyAccount, formatNumberAsBrazilianMoney, formatNumberAsPercentage, parseBrazilianMoney } from '../utils/format';
 import {
   analysisAttention,
   analysisCalculation,
+  analysisDepreciationPairs,
   analysisMessage,
   downloadPdf,
   downloadXlsx,
@@ -24,17 +25,17 @@ interface CompanyCardProps {
 export function CompanyCard({ company }: CompanyCardProps) {
   const [activeTab, setActiveTab] = useState<ReportKind>('inverted');
   const [showHiddenReports, setShowHiddenReports] = useState(false);
-  
+
   const visibleTabs = useMemo(() => reportTabs.filter((tab) => reportHasOccurrence(company, tab.kind)), [company]);
   const displayedTabs = showHiddenReports ? reportTabs : visibleTabs;
   const hiddenReportsCount = reportTabs.length - visibleTabs.length;
   const effectiveTab = displayedTabs.find((tab) => tab.kind === activeTab)?.kind ?? displayedTabs[0]?.kind;
-  
+
   const activeRows = useMemo(() => (effectiveTab ? reportRows(company, effectiveTab) : []), [company, effectiveTab]);
-  const activeTitle = effectiveTab ? reportTitle(effectiveTab, company) : 'Relatórios Ocultos';
-  const activeIntro = effectiveTab ? reportIntro(effectiveTab, company) : 'Nenhum relatório com ocorrência está visível no momento.';
+  const activeTitle = effectiveTab ? reportTitle(effectiveTab, company) : 'Relatorios Ocultos';
+  const activeIntro = effectiveTab ? reportIntro(effectiveTab, company) : 'Nenhum relatorio com ocorrencia esta visivel no momento.';
   const exportEnabled = hasExportContent(company);
-  
+
   const companySummary = useMemo(() => buildCompanySummary(company), [company]);
   const activeReportMeta = useMemo(
     () => (effectiveTab ? buildReportMeta(company, effectiveTab) : { count: 0, hasAttention: false }),
@@ -49,15 +50,13 @@ export function CompanyCard({ company }: CompanyCardProps) {
 
   return (
     <article className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col gap-lg p-lg">
-      {/* Header da Empresa */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-md border-b border-outline-variant pb-lg">
         <MetaItem label="Empresa" value={company.companyName} bold />
         <MetaItem label="CNPJ" value={company.cnpj} tabular />
-        <MetaItem label="Período" value={company.period} />
-        <MetaItem label="Linhas Extraídas" value={`${company.rows.length} registros`} tabular />
+        <MetaItem label="Periodo" value={company.period} />
+        <MetaItem label="Linhas Extraidas" value={`${company.rows.length} registros`} tabular />
       </section>
 
-      {/* Alertas e Erros */}
       {(company.errors.length > 0 || company.unclassified.length > 0) && (
         <section className="space-y-sm">
           {company.errors.map((error, i) => (
@@ -69,13 +68,12 @@ export function CompanyCard({ company }: CompanyCardProps) {
           {company.unclassified.length > 0 && (
             <div className="bg-surface-container-high text-on-surface-variant p-md rounded-lg flex items-center gap-md border border-outline-variant">
               <span className="material-symbols-outlined">help_outline</span>
-              <span className="text-body-sm">Atenção: {company.unclassified.length} linha(s) não foram classificadas automaticamente.</span>
+              <span className="text-body-sm">Atencao: {company.unclassified.length} linha(s) nao foram classificadas automaticamente.</span>
             </div>
           )}
         </section>
       )}
 
-      {/* Navegação de Abas e Ações */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-md border-b border-outline-variant">
         <nav className="flex gap-md overflow-x-auto">
           {displayedTabs.map((tab) => {
@@ -86,24 +84,26 @@ export function CompanyCard({ company }: CompanyCardProps) {
                 key={tab.kind}
                 onClick={() => setActiveTab(tab.kind)}
                 className={`px-md py-sm font-title-sm flex items-center gap-sm transition-all border-b-2 whitespace-nowrap ${
-                  isActive 
-                    ? 'text-primary border-primary' 
+                  isActive
+                    ? 'text-primary border-primary'
                     : 'text-secondary border-transparent hover:text-primary hover:border-outline-variant'
                 }`}
               >
                 {tab.label}
-                <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                  meta.hasAttention ? 'bg-error text-on-error' : 'bg-surface-container-highest text-secondary'
-                }`}>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                    meta.hasAttention ? 'bg-error text-on-error' : 'bg-surface-container-highest text-secondary'
+                  }`}
+                >
                   {meta.count}
                 </span>
               </button>
             );
           })}
         </nav>
-        
+
         <div className="flex gap-sm pb-sm">
-          <button 
+          <button
             disabled={!exportEnabled}
             onClick={() => downloadXlsx(company)}
             className="flex items-center gap-xs px-md py-sm bg-surface-container-highest text-primary border border-outline-variant rounded text-label-caps font-label-caps hover:bg-outline-variant transition-colors disabled:opacity-50"
@@ -111,7 +111,7 @@ export function CompanyCard({ company }: CompanyCardProps) {
             <span className="material-symbols-outlined text-[18px]">description</span>
             XLSX
           </button>
-          <button 
+          <button
             disabled={!exportEnabled}
             onClick={() => downloadPdf(company)}
             className="flex items-center gap-xs px-md py-sm bg-primary text-on-primary rounded text-label-caps font-label-caps hover:opacity-90 transition-all disabled:opacity-50"
@@ -122,7 +122,6 @@ export function CompanyCard({ company }: CompanyCardProps) {
         </div>
       </div>
 
-      {/* Conteúdo do Relatório Ativo */}
       <section className="space-y-lg">
         <div className="flex flex-col gap-sm">
           <h3 className="text-headline-md text-primary">{activeTitle}</h3>
@@ -138,13 +137,11 @@ export function CompanyCard({ company }: CompanyCardProps) {
         )}
 
         {hiddenReportsCount > 0 && (
-          <button 
+          <button
             onClick={() => setShowHiddenReports(!showHiddenReports)}
             className="w-full py-md border border-dashed border-outline-variant rounded-lg text-secondary font-body-sm hover:bg-surface-container-low transition-colors"
           >
-            {showHiddenReports 
-              ? `Ocultar relatórios sem ocorrência` 
-              : `Mostrar mais ${hiddenReportsCount} relatório(s) oculto(s)`}
+            {showHiddenReports ? 'Ocultar relatorios sem ocorrencia' : `Mostrar mais ${hiddenReportsCount} relatorio(s) oculto(s)`}
           </button>
         )}
       </section>
@@ -165,46 +162,118 @@ function MetaItem({ label, value, bold = false, tabular = false }: { label: stri
 
 function AnalysisPanel({ company, kind }: { company: CompanyReport; kind: AnalysisKind }) {
   const rows = reportRows(company, kind);
+  const depreciationPairs = analysisDepreciationPairs(company, kind);
   const isAttention = analysisAttention(company, kind);
+  const message = analysisMessage(company, kind);
   const calculation = analysisCalculation(company, kind);
+  const percentageItem = calculation?.items.find((item) => item.format === 'percentage');
+  const isAboveLimit = Boolean(percentageItem && percentageItem.value > 1);
+  const hasIncompleteBase = message.toLowerCase().includes('base incompleta');
+  const hasZeroRevenue = message.toLowerCase().includes('ficou zerada');
 
   return (
     <div className="space-y-lg">
-      <div className={`p-lg rounded-xl border flex gap-md items-start ${
-        isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-secondary-container/10 border-secondary-container/20 text-on-secondary-container'
-      }`}>
-        <span className="material-symbols-outlined mt-0.5">{isAttention ? 'warning' : 'info'}</span>
-        <div>
-          <h4 className="font-bold mb-1">{isAttention ? 'Atenção Necessária' : 'Análise Concluída'}</h4>
-          <p className="text-body-sm opacity-90">{analysisMessage(company, kind)}</p>
+      <div
+        className={`p-lg rounded-xl border flex gap-md items-start ${
+          isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-secondary-container/10 border-secondary-container/20 text-on-secondary-container'
+        }`}
+      >
+          <span className="material-symbols-outlined mt-0.5">{isAttention ? 'warning' : 'info'}</span>
+          <div>
+            <h4 className="font-bold mb-1">{isAttention ? 'Atencao Necessaria' : 'Analise Concluida'}</h4>
+            <p className="text-body-sm opacity-90">{message}</p>
+          </div>
         </div>
-      </div>
 
       {calculation && (
-        <div className="bg-surface-container-low p-lg rounded-xl border border-outline-variant space-y-md">
-          <div className="flex items-center gap-sm text-primary">
-            <span className="material-symbols-outlined text-[20px]">calculate</span>
-            <h4 className="font-title-sm">Cálculo de Verificação</h4>
+        <div className={`grid grid-cols-1 ${percentageItem ? 'xl:grid-cols-3' : ''} gap-lg`}>
+          <div className={`${percentageItem ? 'xl:col-span-2' : ''} bg-surface-container-low p-lg rounded-xl border border-outline-variant space-y-md`}>
+            <div className="flex items-center gap-sm text-primary">
+              <span className="material-symbols-outlined text-[20px]">calculate</span>
+              <h4 className="font-title-sm">Calculo de Verificacao</h4>
+            </div>
+            <p className="text-body-sm font-medium text-secondary italic">"{calculation.formula}"</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+              {calculation.items.map((item) => (
+                <div key={item.label} className="bg-surface-container-lowest p-md rounded-lg border border-outline-variant/50">
+                  <span className="text-label-caps text-secondary block mb-1">{item.label}</span>
+                  <span className="text-body-md font-bold text-primary tabular-nums">
+                    {item.format === 'percentage' ? formatNumberAsPercentage(item.value) : formatNumberAsBrazilianMoney(item.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="text-body-sm font-medium text-secondary italic">"{calculation.formula}"</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
-            {calculation.items.map((item) => (
-              <div key={item.label} className="bg-surface-container-lowest p-md rounded-lg border border-outline-variant/50">
-                <span className="text-label-caps text-secondary block mb-1">{item.label}</span>
-                <span className="text-body-md font-bold text-primary tabular-nums">{formatNumberAsBrazilianMoney(item.value)}</span>
+
+          {percentageItem && (
+            <div
+              className={`p-lg rounded-xl flex flex-col items-center justify-center text-center shadow-sm border ${
+                isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-primary-container text-on-primary-container border-primary/20'
+              }`}
+            >
+              <div className="w-16 h-16 rounded-full bg-surface-container-lowest/20 flex items-center justify-center mb-md">
+                <span className="material-symbols-outlined !text-[32px]">{isAttention ? 'warning' : 'monitoring'}</span>
               </div>
-            ))}
-          </div>
+              <h4 className="text-title-sm font-title-sm">Percentual CMV/Receita</h4>
+              <p className="text-display-lg font-display-lg mt-xs">{formatNumberAsPercentage(percentageItem.value)}</p>
+              <p className="text-body-sm opacity-80 mt-xs">
+                {isAboveLimit
+                  ? 'Acima do limite esperado de 100%.'
+                  : hasIncompleteBase
+                    ? 'Base incompleta: revise os Cod. R. indicados no alerta.'
+                    : hasZeroRevenue
+                      ? 'Nao foi possivel calcular: receita total igual a zero.'
+                      : 'Dentro do limite esperado de ate 100%.'}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
-      {rows.length > 0 ? (
+      {kind === 'analysis11' && depreciationPairs.length > 0 ? (
+        <DepreciationPairsTable rows={depreciationPairs} />
+      ) : rows.length > 0 ? (
         <DataTable rows={rows} kind={kind} />
       ) : (
         <div className="p-xl text-center border-2 border-dashed border-outline-variant rounded-xl text-secondary italic bg-surface-bright">
-          Nenhuma ocorrência detalhada para listar nesta seção.
+          Nenhuma ocorrencia detalhada para listar nesta secao.
         </div>
       )}
+    </div>
+  );
+}
+
+function DepreciationPairsTable({ rows }: { rows: NonNullable<ReturnType<typeof analysisDepreciationPairs>> }) {
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant rounded-lg shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[1200px]">
+          <thead className="bg-surface-container-low border-b border-outline-variant">
+            <tr>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider border-r border-outline-variant">Cod. R. do bem</th>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider border-r border-outline-variant">Nome da Conta do bem</th>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider border-r border-outline-variant text-right">S. Atual do bem</th>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider border-r border-outline-variant">Cod. R. da depreciacao/amortizacao/exaustao</th>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider border-r border-outline-variant">Nome da Conta da depreciacao/amortizacao/exaustao</th>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider border-r border-outline-variant text-right">S. Atual da depreciacao/amortizacao/exaustao</th>
+              <th className="px-md py-sm font-label-caps text-label-caps text-secondary uppercase tracking-wider">Acao corretiva</th>
+            </tr>
+          </thead>
+          <tbody className="text-data-table font-data-table divide-y divide-outline-variant">
+            {rows.map((row, index) => (
+              <tr key={`${row.assetCode}-${row.depreciationCode}-${index}`} className="hover:bg-surface-container transition-colors">
+                <td className="px-md py-xs border-r border-outline-variant tabular-nums">{row.assetCode || '-'}</td>
+                <td className="px-md py-xs border-r border-outline-variant">{row.assetName}</td>
+                <td className="px-md py-xs border-r border-outline-variant text-right tabular-nums">{row.assetCurrentBalance || '-'}</td>
+                <td className="px-md py-xs border-r border-outline-variant tabular-nums">{row.depreciationCode || '-'}</td>
+                <td className="px-md py-xs border-r border-outline-variant">{row.depreciationName}</td>
+                <td className="px-md py-xs border-r border-outline-variant text-right tabular-nums">{row.depreciationCurrentBalance}</td>
+                <td className="px-md py-xs text-body-sm text-secondary align-top">{row.correctiveAction}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -216,22 +285,23 @@ function ComparisonPanel({ company }: { company: CompanyReport }) {
 
   return (
     <div className="space-y-lg">
-       <div className={`p-lg rounded-xl border flex gap-md items-start ${
-        isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-secondary-container/10 border-secondary-container/20 text-on-secondary-container'
-      }`}>
+      <div
+        className={`p-lg rounded-xl border flex gap-md items-start ${
+          isAttention ? 'bg-error-container/20 border-error/20 text-on-error-container' : 'bg-secondary-container/10 border-secondary-container/20 text-on-secondary-container'
+        }`}
+      >
         <span className="material-symbols-outlined mt-0.5">{isAttention ? 'warning' : 'check_circle'}</span>
         <div>
-          <h4 className="font-bold mb-1">{isAttention ? 'Divergência Detectada' : 'Saldos Reconciliados'}</h4>
+          <h4 className="font-bold mb-1">{isAttention ? 'Divergencia Detectada' : 'Saldos Reconciliados'}</h4>
           <p className="text-body-sm opacity-90">{comparisonReport.message}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
-        {/* Bloco de Cálculo */}
         <div className="lg:col-span-2 bg-surface-container-low p-lg rounded-xl border border-outline-variant space-y-md">
           <div className="flex items-center gap-sm text-primary">
             <span className="material-symbols-outlined text-[20px]">calculate</span>
-            <h4 className="font-title-sm">Fórmula de Conciliação</h4>
+            <h4 className="font-title-sm">Formula de Conciliacao</h4>
           </div>
           <p className="text-body-sm text-secondary italic">"{comparisonFormula(company)}"</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-sm">
@@ -244,15 +314,14 @@ function ComparisonPanel({ company }: { company: CompanyReport }) {
           </div>
         </div>
 
-        {/* Score de Conformidade Visual */}
         <div className="bg-primary-container text-on-primary-container p-lg rounded-xl flex flex-col items-center justify-center text-center shadow-sm border border-primary/20">
           <div className="w-16 h-16 rounded-full bg-surface-container-lowest/20 flex items-center justify-center mb-md">
             <span className="material-symbols-outlined !text-[32px]">{isAttention ? 'analytics' : 'verified'}</span>
           </div>
-          <h4 className="text-title-sm font-title-sm">Score de Precisão</h4>
+          <h4 className="text-title-sm font-title-sm">Score de Precisao</h4>
           <p className="text-display-lg font-display-lg mt-xs">{isAttention ? 'Divergente' : '100%'}</p>
           <p className="text-body-sm opacity-80 mt-xs">
-            {isAttention ? 'Verifique os lançamentos manuais.' : 'Dados consistentes com o balancete.'}
+            {isAttention ? 'Verifique os lancamentos manuais.' : 'Dados consistentes com o balancete.'}
           </p>
         </div>
       </div>
@@ -263,10 +332,10 @@ function ComparisonPanel({ company }: { company: CompanyReport }) {
         {comparisonReport.mode === 'distribution' && (
           <ComparisonAccount title="Conta 2.4.13" row={comparisonReport.account2413Row} value={signedCurrentBalance(comparisonReport.account2413Row)} />
         )}
-        <ComparisonAccount 
-          title={comparisonReport.mode === 'fallback' ? 'Conta 2.4.13' : 'Conta 1.1.04.019'} 
-          row={comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow} 
-          value={comparisonReport.targetValue} 
+        <ComparisonAccount
+          title={comparisonReport.mode === 'fallback' ? 'Conta 2.4.13' : 'Conta 1.1.04.019'}
+          row={comparisonReport.mode === 'fallback' ? comparisonReport.account2413Row : comparisonReport.distributionRow}
+          value={comparisonReport.targetValue}
         />
       </div>
     </div>
@@ -279,16 +348,18 @@ function ComparisonAccount({ title, row, value }: { title: string; row?: Company
       <h5 className="text-label-caps font-label-caps text-secondary mb-md border-b border-outline-variant pb-2">{title}</h5>
       {row ? (
         <div className="space-y-xs">
-          <p className="text-body-sm font-bold text-primary truncate" title={row.name}>{row.name}</p>
+          <p className="text-body-sm font-bold text-primary truncate" title={row.name}>
+            {row.name}
+          </p>
           <p className="text-[12px] font-mono text-secondary mb-3">{row.account}</p>
           <div className="flex justify-between items-end mt-4">
-             <span className="text-[11px] text-on-surface-variant font-medium">Analisado</span>
-             <span className="text-body-sm font-bold tabular-nums">{formatNumberAsBrazilianMoney(value)}</span>
+            <span className="text-[11px] text-on-surface-variant font-medium">Analisado</span>
+            <span className="text-body-sm font-bold tabular-nums">{formatNumberAsBrazilianMoney(value)}</span>
           </div>
         </div>
       ) : (
         <div className="py-md text-center">
-          <span className="text-body-sm text-secondary italic">Não localizada</span>
+          <span className="text-body-sm text-secondary italic">Nao localizada</span>
         </div>
       )}
     </div>
@@ -326,12 +397,13 @@ function buildCalculationRows(company: CompanyReport) {
   rows.push(
     { label: 'Soma Calculada', value: comparisonReport.baseValue },
     {
-      label: comparisonReport.mode === 'fallback'
+      label:
+        comparisonReport.mode === 'fallback'
           ? comparisonLabel('Conta 2.4.13', comparisonReport.account2413Row)
           : comparisonLabel('Conta 1.1.04.019', comparisonReport.distributionRow),
       value: comparisonReport.targetValue
     },
-    { label: 'Diferença', value: comparisonReport.difference }
+    { label: 'Diferenca', value: comparisonReport.difference }
   );
 
   return rows;
