@@ -45,7 +45,8 @@ export const analysisOrder: AnalysisKind[] = [
   'analysis8',
   'analysis9',
   'analysis10',
-  'analysis11'
+  'analysis11',
+  'analysis12'
 ];
 
 export const reportTabs: Array<{ kind: ReportKind; label: string }> = [
@@ -62,7 +63,8 @@ export const reportTabs: Array<{ kind: ReportKind; label: string }> = [
   { kind: 'analysis8', label: 'Fornecedores com Saldo Residual' },
   { kind: 'analysis9', label: 'Fornecedores com Credito sem Debito' },
   { kind: 'analysis10', label: 'CMV x Receita Mercadorias' },
-  { kind: 'analysis11', label: 'Depreciacao x Bens' }
+  { kind: 'analysis11', label: 'Depreciacao x Bens' },
+  { kind: 'analysis12', label: 'Despesas Credoras na Classe 3' }
 ];
 
 export function reportRows(company: CompanyReport, kind: ReportKind) {
@@ -179,6 +181,9 @@ export function correctiveAction(kind: ReportKind, row?: LedgerLine | InvertedBa
   }
   if (kind === 'analysis11') {
     return 'Conferir se cada conta de depreciacao possui bem equivalente, validar o pareamento entre bem e depreciacao e revisar classificacoes/lancamentos quando a depreciacao superar o valor do bem.';
+  }
+  if (kind === 'analysis12') {
+    return 'Revisar classificacao e lancamentos da conta de despesa, pois ela encerrou com saldo credor fora dos grupos de excecao permitidos.';
   }
 
   return 'Revisar a origem do alerta e ajustar os lancamentos ou classificacoes contabeis relacionados.';

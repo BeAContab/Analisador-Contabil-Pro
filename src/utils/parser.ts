@@ -366,7 +366,8 @@ function buildAnalysisReports(rows: LedgerLine[]): AnalysisReport[] {
     buildAnalysis8(rows),
     buildAnalysis9(rows),
     buildAnalysis10(rows),
-    buildAnalysis11(rows)
+    buildAnalysis11(rows),
+    buildAnalysis12(rows)
   ];
 }
 
@@ -771,6 +772,28 @@ function buildAnalysis11(rows: LedgerLine[]): AnalysisReport {
           items: calculationItems
         }
       : undefined
+  };
+}
+
+function buildAnalysis12(rows: LedgerLine[]): AnalysisReport {
+  const excludedRoots = ['3', '3.1', '3.1.02', '3.1.03', '3.1.06', '3.9'];
+  const flaggedRows = rows.filter((row) => {
+    if (!row.account.startsWith('3')) return false;
+    if (excludedRoots.some((root) => row.account === root || row.account.startsWith(`${root}.`))) return false;
+    return balanceNature(row.currentBalance) === 'C' && absoluteValue(row.currentBalance) > 0;
+  });
+
+  return {
+    kind: 'analysis12',
+    title: 'Despesas Credoras na Classe 3',
+    intro:
+      'Verifica contas da classe 3 que deveriam encerrar com S. Atual em D, excluindo os grupos 3, 3.1, 3.1.02, 3.1.03, 3.1.06 e 3.9, com seus respectivos filhos.',
+    message:
+      flaggedRows.length > 0
+        ? 'Atencao: foram encontradas contas da classe 3 com S. Atual credor fora dos grupos de excecao definidos.'
+        : 'Tudo OK: nao foram encontradas contas da classe 3 com S. Atual credor fora dos grupos de excecao definidos.',
+    rows: flaggedRows,
+    isAttention: flaggedRows.length > 0
   };
 }
 

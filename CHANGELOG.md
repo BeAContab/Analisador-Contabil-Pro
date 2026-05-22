@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10 - 2026-05-22
+- Adicionada a analise `Despesas Credoras na Classe 3`, validando contas da classe 3 com `S. Atual` credor fora dos grupos de excecao definidos.
+- Mantidas como excecao as familias `3`, `3.1`, `3.1.02`, `3.1.03`, `3.1.06` e `3.9`, com seus respectivos filhos.
+- Incluida acao corretiva especifica para orientar a revisao de classificacao e lancamentos das despesas credoras.
+
 ## 1.0.9 - 2026-05-22
 - Refinada a analise `Depreciacao x Bens` com pareamento semantico entre bens e depreciacoes, cobrindo variacoes como `p/`, `Contr.` e `Expl.`.
 - O relatorio passou a usar colunas especificas para bem e depreciacao/amortizacao/exaustao, em vez da tabela contabil generica.

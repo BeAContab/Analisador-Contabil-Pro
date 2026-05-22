@@ -66,7 +66,8 @@ export type AnalysisKind =
   | 'analysis8'
   | 'analysis9'
   | 'analysis10'
-  | 'analysis11';
+  | 'analysis11'
+  | 'analysis12';
 
 export interface AnalysisReport {
   kind: AnalysisKind;
